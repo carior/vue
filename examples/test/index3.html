@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>render中传入组件</title>
+    <!-- Delete ".min" for console warnings in development -->
+    <!-- <script src="../../dist/vue.min.js"></script> -->
+    <script src="../../dist/vue.js"></script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <!-- 组件写法1 -->
+    <!-- <script type="text/x-template" id="temp">
+      <h3>这是一个组件</h3>
+    </script> -->
+    <!-- 组件写法2 -->
+    <template id="temp">
+      <div>
+          这是一个组件{{a}}
+      </div>
+    </template>
+    <script>
+      const com = {
+        template:"#temp",
+        data() {
+          return {
+            a: 1
+          }
+        }
+      }
+      new Vue({
+        el: '#app',
+        render: h => h(com)
+      })
+    </script>
+  </body>
+</html>

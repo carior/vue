@@ -159,7 +159,7 @@ export function createPatchFunction (backend) {
     const children = vnode.children
     const tag = vnode.tag
     if (isDef(tag)) {
-      // 先简单对tag的合法性在非生产环境下做校验
+      // 判断 vnode 是否包含 tag，如果包含，先简单对tag的合法性在非生产环境下做校验
       if (process.env.NODE_ENV !== 'production') {
         if (data && data.pre) {
           creatingElmInVPre++
@@ -217,7 +217,6 @@ export function createPatchFunction (backend) {
       vnode.elm = nodeOps.createComment(vnode.text)
       insert(parentElm, vnode.elm, refElm)
     } else {
-      debugger
       // 如果 vnode 节点不包含 tag，则它有可能是一个注释或者纯文本节点，可以直接插入到父元素中。
       // 在我们这个例子中，最内层就是一个文本 vnode，它的 text 值取的就是之前的 this.message 的值 Hello Vue!。
       vnode.elm = nodeOps.createTextNode(vnode.text)
@@ -225,6 +224,7 @@ export function createPatchFunction (backend) {
     }
   }
 
+  // createComponent 方法目的是尝试创建子组件
   function createComponent (vnode, insertedVnodeQueue, parentElm, refElm) {
     let i = vnode.data
     if (isDef(i)) {

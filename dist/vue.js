@@ -3168,6 +3168,9 @@
   /*  */
 
   // inline hooks to be invoked on component VNodes during patch
+  // Vue.js 使用的 Virtual DOM 参考的是开源库 snabbdom
+  // 它的一个特点是在 VNode 的 patch 流程中对外暴露了各种时机的钩子函数，方便我们做一些额外的事情
+  // Vue.js 也是充分利用这一点，在初始化一个 Component 类型的 VNode 的过程中实现了几个钩子函数
   var componentVNodeHooks = {
     init: function init (vnode, hydrating) {
       if (
@@ -3234,6 +3237,17 @@
 
   var hooksToMerge = Object.keys(componentVNodeHooks);
 
+  /**
+   * 有3个关键步骤：构造子类构造函数，安装组件钩子函数和实例化 vnode
+   * createComponent 函数最后返回的是组件 vnode ，它也一样走到了 vm._update 方法，进而执行了 patch 函数。
+   * @export
+   * @param {(Class<Component> | Function | Object | void)} Ctor
+   * @param {?VNodeData} data
+   * @param {Component} context
+   * @param {?Array<VNode>} children
+   * @param {string} [tag]
+   * @returns {(VNode | Array<VNode> | void)}
+   */
   function createComponent (
     Ctor,
     data,
@@ -3245,6 +3259,8 @@
       return
     }
 
+    // 这里是 构造子类构造函数
+    // baseCtor 实际上就是 Vue, 这个的定义是在最开始初始化 Vue 的阶段，在 src/core/global-api/index.js 中的 initGlobalAPI 函数
     var baseCtor = context.$options._base;
 
     // plain options object: turn it into a constructor
@@ -3319,9 +3335,13 @@
     }
 
     // install component management hooks onto the placeholder node
+    // 这里是 安装组件钩子函数
     installComponentHooks(data);
 
     // return a placeholder vnode
+    // 这里是 实例化VNode
+    // 通过 new VNode 实例化一个 vnode 并返回。
+    // 需要注意的是和普通元素节点的 vnode 不同，组件的 vnode 是没有 children 的，这点很关键(⭐)。
     var name = Ctor.options.name || tag;
     var vnode = new VNode(
       ("vue-component-" + (Ctor.cid) + (name ? ("-" + name) : '')),
@@ -3353,6 +3373,10 @@
     return new vnode.componentOptions.Ctor(options)
   }
 
+  // 整个 installComponentHooks 的过程就是把 componentVNodeHooks 的钩子函数合并到 data.hook 中，
+  // 在 VNode 执行 patch 的过程中执行相关的钩子函数
+  // 这里要注意的是合并策略，在合并过程中，如果某个时机的钩子已经存在 data.hook 中，那么通过执行 mergeHook 函数做合并，
+  // 这个逻辑很简单，就是在最终执行的时候，依次执行这两个钩子函数即可。
   function installComponentHooks (data) {
     var hooks = data.hook || (data.hook = {});
     for (var i = 0; i < hooksToMerge.length; i++) {
@@ -3518,7 +3542,7 @@
       }
     } else {
       // 如果是 tag 一个 Component 类型，则直接调用 createComponent 创建一个组件类型的 VNode 节点
-      // createComponent 创建 vnode 的过程 本质上它还是返回了一个vnode
+      // createComponent 创建 vnode 的过程 本质上它还是返回了一个vnode，它的实现定义在了src/core/vdom/create-component.js 文件中
       // direct component options / constructor
       vnode = createComponent(tag, data, context, children);
     }
@@ -4027,7 +4051,6 @@
       // Vue.prototype.__patch__ is injected in entry points
       // based on the rendering backend used.
       // _update 的核心(⭐)就是调用 vm.__patch__ 方法,这个方法实际上在不同的平台，比如 web 和 weex 上的定义是不一样的，因此在 web 平台中它的定义在 src/platforms/web/runtime/index.js
-      
       if (!prevVnode) {
         // initial render
         // vm.$el 的赋值是在之前 mountComponent 函数做的，vnode 对应的是调用 render 函数的返回值，hydrating 在非服务端渲染情况下为 false，removeOnly 为 false。
@@ -5076,6 +5099,8 @@
         // internal component options needs special treatment.
         initInternalComponent(vm, options);
       } else {
+        // 这样就把 Vue 上的一些 option 扩展到了 vm.$options 上/
+        // mergeOptions的功能是把 Vue 构造函数的 options 和用户传入的 options 做一层合并，到 vm.$options 上。
         vm.$options = mergeOptions(
           resolveConstructorOptions(vm.constructor),
           options || {},
@@ -5231,6 +5256,9 @@
 
     /**
      * Class inheritance
+     * Vue.extend 的作用就是构造一个 Vue 的子类，
+     * 它使用一种非常经典的原型继承的方式把一个纯对象转换一个继承于 Vue 的构造器 Sub 并返回，
+     * 然后对 Sub 这个对象本身扩展了一些属性，如扩展 options、添加全局 API 等；
      */
     Vue.extend = function (extendOptions) {
       extendOptions = extendOptions || {};
@@ -5246,6 +5274,7 @@
         validateComponentName(name);
       }
 
+      // 当我们去实例化 Sub 的时候，就会执行 this._init 逻辑再次走到了Vue实例化的初始逻辑
       var Sub = function VueComponent (options) {
         this._init(options);
       };
@@ -5261,9 +5290,11 @@
       // For props and computed properties, we define the proxy getters on
       // the Vue instances at extension time, on the extended prototype. This
       // avoids Object.defineProperty calls for each instance created.
+      // 对props做了初始化工作
       if (Sub.options.props) {
         initProps$1(Sub);
       }
+      // 对computed做了初始化工作
       if (Sub.options.computed) {
         initComputed$1(Sub);
       }
@@ -5291,6 +5322,7 @@
       Sub.sealedOptions = extend({}, Sub.options);
 
       // cache constructor
+      // 最后对于这个 Sub 构造函数做了缓存，避免多次执行 Vue.extend 的时候对同一个子组件重复构造
       cachedCtors[SuperId] = Sub;
       return Sub
     };
@@ -5548,6 +5580,8 @@
 
     // this is used to identify the "base" constructor to extend all plain-object
     // components with in Weex's multi-instance scenarios.
+    // 这里定义的是options，而我们的 createComponent 取的是context.$options._base，
+    // 实际上在 src/core/instance/init.js 里 Vue 原型上的 _init 函数中有一段逻辑
     Vue.options._base = Vue;
 
     extend(Vue.options.components, builtInComponents);
@@ -6071,7 +6105,7 @@
       var children = vnode.children;
       var tag = vnode.tag;
       if (isDef(tag)) {
-        // 先简单对tag的合法性在非生产环境下做校验
+        // 判断 vnode 是否包含 tag，如果包含，先简单对tag的合法性在非生产环境下做校验
         {
           if (data && data.pre) {
             creatingElmInVPre++;
@@ -6111,7 +6145,6 @@
         vnode.elm = nodeOps.createComment(vnode.text);
         insert(parentElm, vnode.elm, refElm);
       } else {
-        debugger
         // 如果 vnode 节点不包含 tag，则它有可能是一个注释或者纯文本节点，可以直接插入到父元素中。
         // 在我们这个例子中，最内层就是一个文本 vnode，它的 text 值取的就是之前的 this.message 的值 Hello Vue!。
         vnode.elm = nodeOps.createTextNode(vnode.text);
@@ -6119,6 +6152,7 @@
       }
     }
 
+    // createComponent 方法目的是尝试创建子组件
     function createComponent (vnode, insertedVnodeQueue, parentElm, refElm) {
       var i = vnode.data;
       if (isDef(i)) {

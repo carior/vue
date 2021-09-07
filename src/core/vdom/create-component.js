@@ -33,6 +33,9 @@ import {
 } from 'weex/runtime/recycle-list/render-component-template'
 
 // inline hooks to be invoked on component VNodes during patch
+// Vue.js 使用的 Virtual DOM 参考的是开源库 snabbdom
+// 它的一个特点是在 VNode 的 patch 流程中对外暴露了各种时机的钩子函数，方便我们做一些额外的事情
+// Vue.js 也是充分利用这一点，在初始化一个 Component 类型的 VNode 的过程中实现了几个钩子函数
 const componentVNodeHooks = {
   init (vnode: VNodeWithData, hydrating: boolean): ?boolean {
     if (
@@ -98,6 +101,17 @@ const componentVNodeHooks = {
 
 const hooksToMerge = Object.keys(componentVNodeHooks)
 
+/**
+ * 有3个关键步骤：构造子类构造函数，安装组件钩子函数和实例化 vnode
+ * createComponent 函数最后返回的是组件 vnode ，它也一样走到了 vm._update 方法，进而执行了 patch 函数。
+ * @export
+ * @param {(Class<Component> | Function | Object | void)} Ctor
+ * @param {?VNodeData} data
+ * @param {Component} context
+ * @param {?Array<VNode>} children
+ * @param {string} [tag]
+ * @returns {(VNode | Array<VNode> | void)}
+ */
 export function createComponent (
   Ctor: Class<Component> | Function | Object | void,
   data: ?VNodeData,
@@ -109,6 +123,8 @@ export function createComponent (
     return
   }
 
+  // 这里是 构造子类构造函数
+  // baseCtor 实际上就是 Vue, 这个的定义是在最开始初始化 Vue 的阶段，在 src/core/global-api/index.js 中的 initGlobalAPI 函数
   const baseCtor = context.$options._base
 
   // plain options object: turn it into a constructor
@@ -183,9 +199,13 @@ export function createComponent (
   }
 
   // install component management hooks onto the placeholder node
+  // 这里是 安装组件钩子函数
   installComponentHooks(data)
 
   // return a placeholder vnode
+  // 这里是 实例化VNode
+  // 通过 new VNode 实例化一个 vnode 并返回。
+  // 需要注意的是和普通元素节点的 vnode 不同，组件的 vnode 是没有 children 的，这点很关键(⭐)。
   const name = Ctor.options.name || tag
   const vnode = new VNode(
     `vue-component-${Ctor.cid}${name ? `-${name}` : ''}`,
@@ -225,6 +245,10 @@ export function createComponentInstanceForVnode (
   return new vnode.componentOptions.Ctor(options)
 }
 
+// 整个 installComponentHooks 的过程就是把 componentVNodeHooks 的钩子函数合并到 data.hook 中，
+// 在 VNode 执行 patch 的过程中执行相关的钩子函数
+// 这里要注意的是合并策略，在合并过程中，如果某个时机的钩子已经存在 data.hook 中，那么通过执行 mergeHook 函数做合并，
+// 这个逻辑很简单，就是在最终执行的时候，依次执行这两个钩子函数即可。
 function installComponentHooks (data: VNodeData) {
   const hooks = data.hook || (data.hook = {})
   for (let i = 0; i < hooksToMerge.length; i++) {
