@@ -1,5 +1,13 @@
 /* @flow */
 
+// 真正的dom元素是非常庞大的，一个节点里面包含了很多属性，因为浏览器的标准就是把DOM设计的非常复杂。当我们频繁的去做DOM更新的时候，就会产生一定的性能问题。
+// 而vnode就是用一个原生的js对象去描述一个DOM节点，所以它比创建一个DOM的代价要小很多。
+
+// 其实 VNode 是对真实 DOM 的一种抽象描述，它的核心定义无非就几个关键属性，标签名、数据、子节点、键值等，其它属性都是用来扩展 VNode 的灵活性以及实现一些特殊 feature 的。
+// 由于 VNode 只是用来映射到真实 DOM 的渲染，不需要包含操作 DOM 的方法，因此它是非常轻量和简单的。
+
+// Virtual DOM 除了它的数据结构的定义，映射到真实的 DOM 实际上要经历 VNode 的 create、diff、patch 等过程。
+// 那么在 Vue.js 中，VNode 的 create 是通过之前提到的 createElement 方法创建的
 export default class VNode {
   tag: string | void;
   data: VNodeData | void;

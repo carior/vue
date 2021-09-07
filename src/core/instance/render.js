@@ -28,9 +28,13 @@ export function initRender (vm: Component) {
   // so that we get proper render context inside it.
   // args order: tag, data, children, normalizationType, alwaysNormalize
   // internal version is used by render functions compiled from templates
+  // 被模板编译成的 render 函数使用
   vm._c = (a, b, c, d) => createElement(vm, a, b, c, d, false)
   // normalization is always applied for the public version, used in
   // user-written render functions.
+  // 是用户手写 render 方法使用的
+  // createElement是做了什么？它定义在 src/core/vdom/create-element.js 中。
+  // 但是在分析createElement，需要先了解下Virtual DOM 的概念。它是定义在 src/core/vdom/vnode.js 中的。
   vm.$createElement = (a, b, c, d) => createElement(vm, a, b, c, d, true)
 
   // $attrs & $listeners are exposed for easier HOC creation.
@@ -66,6 +70,7 @@ export function renderMixin (Vue: Class<Component>) {
     return nextTick(fn, this)
   }
 
+  // 是实例的一个私有方法 用来把实例渲染成一个虚拟Node。
   Vue.prototype._render = function (): VNode {
     const vm: Component = this
     const { render, _parentVnode } = vm.$options
@@ -88,7 +93,9 @@ export function renderMixin (Vue: Class<Component>) {
       // separately from one another. Nested component's render fns are called
       // when parent component is patched.
       currentRenderingInstance = vm
-      vnode = render.call(vm._renderProxy, vm.$createElement)
+      // 最关键(⭐)的是render方法的调用, 给render方法传入一个vm.$createElement方法，通过执行createElement方法并返回的是一个虚拟vnode
+      // vm.$createElement方法的定义是在执行 initRender 方法的时候
+      vnode = render.call(vm._renderProxy, vm.$createElement) 
     } catch (e) {
       handleError(e, vm, `render`)
       // return error render result,

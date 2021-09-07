@@ -26,6 +26,7 @@ export function createComment (text: string): Comment {
   return document.createComment(text)
 }
 
+// 其实就是调用原生 DOM 的 API 进行 DOM 操作
 export function insertBefore (parentNode: Node, newNode: Node, referenceNode: Node) {
   parentNode.insertBefore(newNode, referenceNode)
 }
@@ -34,6 +35,7 @@ export function removeChild (node: Node, child: Node) {
   node.removeChild(child)
 }
 
+// 
 export function appendChild (node: Node, child: Node) {
   node.appendChild(child)
 }

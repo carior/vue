@@ -28,7 +28,7 @@ export function initMixin (Vue: Class<Component>) {
 
     // a flag to avoid this being observed
     vm._isVue = true
-    // merge options
+    // merge options 合并配置
     if (options && options._isComponent) {
       // optimize internal component instantiation
       // since dynamic options merging is pretty slow, and none of the
@@ -49,12 +49,12 @@ export function initMixin (Vue: Class<Component>) {
     }
     // expose real self
     vm._self = vm
-    initLifecycle(vm)
-    initEvents(vm)
-    initRender(vm)
+    initLifecycle(vm) // 初始化生命周期
+    initEvents(vm) // 初始化事件中心
+    initRender(vm) // 初始化渲染
     callHook(vm, 'beforeCreate')
     initInjections(vm) // resolve injections before data/props
-    initState(vm)
+    initState(vm) // 初始化 data、props、computed、watcher
     initProvide(vm) // resolve provide after data/props
     callHook(vm, 'created')
 
@@ -66,7 +66,11 @@ export function initMixin (Vue: Class<Component>) {
     }
 
     if (vm.$options.el) {
-      // vue 挂载 vm
+      // vm.$mount 方法挂载 vm，挂载的目标就是把模板渲染成最终的DOM
+      // $mount方法在多个文件中都有定义，
+      // 如 src/platform/web/entry-runtime-with-compiler.js、src/platform/web/runtime/index.js、src/platform/weex/runtime/index.js。
+      // 因为 $mount 这个方法的实现是和平台、构建方式都相关的。
+      // 我们主要看带 compiler 版本的 $mount 实现
       vm.$mount(vm.$options.el)
     }
   }

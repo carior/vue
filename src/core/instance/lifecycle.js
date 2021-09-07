@@ -56,6 +56,8 @@ export function initLifecycle (vm: Component) {
 }
 
 export function lifecycleMixin (Vue: Class<Component>) {
+  // _update是实例的一个私有方法，它被调用的时机有两个，一个是首次渲染，一个是数据更新的时候
+  // _update 方法的作用是把 VNode 渲染成真实的 DOM
   Vue.prototype._update = function (vnode: VNode, hydrating?: boolean) {
     const vm: Component = this
     const prevEl = vm.$el
@@ -64,8 +66,12 @@ export function lifecycleMixin (Vue: Class<Component>) {
     vm._vnode = vnode
     // Vue.prototype.__patch__ is injected in entry points
     // based on the rendering backend used.
+    // _update 的核心(⭐)就是调用 vm.__patch__ 方法,这个方法实际上在不同的平台，比如 web 和 weex 上的定义是不一样的，因此在 web 平台中它的定义在 src/platforms/web/runtime/index.js
+    
     if (!prevVnode) {
       // initial render
+      // vm.$el 的赋值是在之前 mountComponent 函数做的，vnode 对应的是调用 render 函数的返回值，hydrating 在非服务端渲染情况下为 false，removeOnly 为 false。
+      // 回到patch 方法本身，它接收 4个参数，oldVnode 表示旧的 VNode 节点，它也可以不存在或者是一个 DOM 对象；vnode 表示执行 vm._render() 后返回的 VNode 的节点；hydrating 表示是否是服务端渲染；removeOnly 是给 transition-group 用的
       vm.$el = vm.__patch__(vm.$el, vnode, hydrating, false /* removeOnly */)
     } else {
       // updates
@@ -139,12 +145,14 @@ export function lifecycleMixin (Vue: Class<Component>) {
 }
 
 // 这个方法的核心就是先实例化渲染一个Watcher, 在它的回调函数中会调用updateComponent方法
+// Vue.prototype.$mount
 export function mountComponent (
   vm: Component,
   el: ?Element,
   hydrating?: boolean
 ): Component {
   vm.$el = el
+  // 经过Vue.prototype.$mount的重新定义，所有的组件渲染最终都会转换成render方法
   if (!vm.$options.render) {
     vm.$options.render = createEmptyVNode
     if (process.env.NODE_ENV !== 'production') {
@@ -167,7 +175,7 @@ export function mountComponent (
   }
   callHook(vm, 'beforeMount')
 
-  // updateComponent方法中，先生成了虚拟DOM vnode，最终调用了vm._update，更新DOM
+  // updateComponent方法中，先生成了虚拟DOM vnode，最终调用了vm._update，更新DOM，完成整个渲染工作
   let updateComponent
   /* istanbul ignore if */
   if (process.env.NODE_ENV !== 'production' && config.performance && mark) {
@@ -178,12 +186,12 @@ export function mountComponent (
       const endTag = `vue-perf-end:${id}`
 
       mark(startTag)
-      const vnode = vm._render() // 核心方法(⭐)
+      const vnode = vm._render() // 核心方法(⭐) 它用来把实例渲染成一个虚拟Node。定义在src/core/instance/render.js
       mark(endTag)
       measure(`vue ${name} render`, startTag, endTag)
 
       mark(startTag)
-      vm._update(vnode, hydrating)  // 核心方法(⭐)
+      vm._update(vnode, hydrating)  // 核心方法(⭐) 把得到的vnode渲染成一个真实的DOM并渲染出来。定义在src/core/instance/lifecycle.js
       mark(endTag)
       measure(`vue ${name} patch`, startTag, endTag)
     }
@@ -197,6 +205,7 @@ export function mountComponent (
   // since the watcher's initial patch may call $forceUpdate (e.g. inside child
   // component's mounted hook), which relies on vm._watcher being already defined
   // Watcher在这里起到两个作用，一个是初始化的时候回执行回调函数，另一个是当vm实例中监测的数据发生变化的时候执行回调函数。
+  // noop就是一个空函数
   new Watcher(vm, updateComponent, noop, {
     before () {
       if (vm._isMounted && !vm._isDestroyed) {

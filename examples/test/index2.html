@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>简单的例子2</title>
+    <!-- Delete ".min" for console warnings in development -->
+    <!-- <script src="../../dist/vue.min.js"></script> -->
+    <script src="../../dist/vue.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <!-- <div>{{message}}</div> -->
+    </div>
+  </body>
+  <script>
+    var app = new Vue({
+    el: '#app',
+    render: function (createElement) {
+      return createElement('div', {
+        attrs: {
+          id: 'app'
+        },
+      }, this.message)
+    },
+    data: {
+      message: 'Hello Vue!'
+    }
+  })
+  </script>
+</html>
