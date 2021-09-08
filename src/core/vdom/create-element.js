@@ -25,6 +25,7 @@ const ALWAYS_NORMALIZE = 2
 
 // wrapper function for providing a more flexible interface
 // without getting yelled at by flow
+// 该方法主要是返回一个vnode
 export function createElement (
   context: Component,
   tag: any,

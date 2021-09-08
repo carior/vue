@@ -18,9 +18,13 @@ import {
   invokeWithErrorHandling
 } from '../util/index'
 
+// activeInstance 作用就是保持当前上下文的 Vue 实例，它是在 lifecycle 模块的全局变量。
 export let activeInstance: any = null
 export let isUpdatingChildComponent: boolean = false
 
+// 用 prevActiveInstance 保留上一次的 activeInstance。
+// 实际上，prevActiveInstance 和当前的 vm 是一个父子关系
+// 当一个 vm 实例完成它的所有子树的 patch 或者 update 过程后，activeInstance 会回到它的父实例
 export function setActiveInstance(vm: Component) {
   const prevActiveInstance = activeInstance
   activeInstance = vm
@@ -33,11 +37,12 @@ export function initLifecycle (vm: Component) {
   const options = vm.$options
 
   // locate first non-abstract parent
-  let parent = options.parent
+  let parent = options.parent // 用来保留当前的 vm 的父实例
   if (parent && !options.abstract) {
     while (parent.$options.abstract && parent.$parent) {
       parent = parent.$parent
     }
+    // 把当前的 vm 存储到父实例的 $children 中。
     parent.$children.push(vm)
   }
 
@@ -62,8 +67,13 @@ export function lifecycleMixin (Vue: Class<Component>) {
     const vm: Component = this
     const prevEl = vm.$el
     const prevVnode = vm._vnode
+    // 把当前的 vm 赋值给 activeInstance
+    // 这样就完美地保证了 createComponentInstanceForVnode 整个深度遍历过程中，我们在实例化子组件的时候能传入当前子组件的父 Vue 实例，并在 _init 的过程中，通过 vm.$parent 把这个父子关系保留。(⭐)
     const restoreActiveInstance = setActiveInstance(vm)
-    vm._vnode = vnode
+    // 这个 vnode 是通过 vm._render() 返回的组件渲染 VNode，vm._vnode 和 vm.$vnode 的关系就是一种父子关系，（vm.$vnode定义在./render.js中）
+    // vm.$vnode 表示Vue实例的父 VNode
+    // 用代码表达就是 vm._vnode.parent === vm.$vnode。
+    vm._vnode = vnode 
     // Vue.prototype.__patch__ is injected in entry points
     // based on the rendering backend used.
     // _update 的核心(⭐)就是调用 vm.__patch__ 方法,这个方法实际上在不同的平台，比如 web 和 weex 上的定义是不一样的，因此在 web 平台中它的定义在 src/platforms/web/runtime/index.js
@@ -144,7 +154,7 @@ export function lifecycleMixin (Vue: Class<Component>) {
 }
 
 // 这个方法的核心就是先实例化渲染一个Watcher, 在它的回调函数中会调用updateComponent方法
-// Vue.prototype.$mount
+// Vue.prototype.$mount 实际上是去调用了mountComponent方法
 export function mountComponent (
   vm: Component,
   el: ?Element,

@@ -129,10 +129,11 @@ export function createPatchFunction (backend) {
   let creatingElmInVPre = 0
 
   // createElm 作用是通过虚拟节点创建真实的DOM并插入到它的父节点中
-  // 如果如果 vnode 节点不包含 tag，则它有可能是一个注释或者纯文本节点，可以直接插入到父元素中。
+  // 如果 vnode 节点不包含 tag，则它有可能是一个注释或者纯文本节点，可以直接插入到父元素中。
   // parentElm 是 oldVnode.elm 的父元素
+  // 当我们创建的是一个组件的时候，只传了 2 个参数，所以对应的 parentElm 是 undefined。
   function createElm (
-    vnode,
+    vnode,  // 传入的 vnode 是组件渲染的 vnode，也就是我们之前说的 vm._vnode，如果组件的根节点是个普通元素，那么 vm._vnode 也是普通的 vnode
     insertedVnodeQueue,
     parentElm,
     refElm,
@@ -150,7 +151,7 @@ export function createPatchFunction (backend) {
     }
 
     vnode.isRootInsert = !nested // for transition enter check
-    // 关键逻辑(⭐) createComponent 方法目的是尝试创建子组件
+    // 关键逻辑(⭐) createComponent 方法目的是尝试创建子组件, 如果返回true则直接结束
     if (createComponent(vnode, insertedVnodeQueue, parentElm, refElm)) {
       return
     }
@@ -226,7 +227,7 @@ export function createPatchFunction (backend) {
 
   // createComponent 方法目的是尝试创建子组件
   function createComponent (vnode, insertedVnodeQueue, parentElm, refElm) {
-    let i = vnode.data
+    let i = vnode.data // data.hook data中有hook
     if (isDef(i)) {
       const isReactivated = isDef(vnode.componentInstance) && i.keepAlive
       if (isDef(i = i.hook) && isDef(i = i.init)) {
@@ -741,6 +742,7 @@ export function createPatchFunction (backend) {
     } else {
       // 以下是关键步骤(⭐)
       // oldVnode 对应的是例子中 id 为 app 的 DOM 对象
+      // 所以 isRealElement 为 true
       const isRealElement = isDef(oldVnode.nodeType)
       if (!isRealElement && sameVnode(oldVnode, vnode)) {
         // patch existing root node
@@ -770,7 +772,7 @@ export function createPatchFunction (backend) {
           }
           // either not server-rendered, or hydration failed.
           // create an empty node and replace it
-          // 把 oldVnode 转换成 VNode 对象
+          // 把 oldVnode 转换成 VNode 对象，先创建一个父节点占位符
           oldVnode = emptyNodeAt(oldVnode)
         }
 
@@ -783,6 +785,9 @@ export function createPatchFunction (backend) {
         // 首次渲染我们调用了 createElm 方法，这里传入的 parentElm 是 oldVnode.elm 的父元素
         // 在我们的例子是 id 为 #app div 的父元素 也就是 Body
         // 实际上整个过程就是递归创建了一个完整的 DOM 树并插入到 Body 上。
+
+        /* 先创建一个父节点占位符，然后再遍历所有子 VNode 递归调用 createElm，在遍历的过程中，
+        如果遇到子 VNode 是一个组件的 VNode，则重复本节开始的过程，这样通过一个递归的方式就可以完整地构建了整个组件树。 */
         createElm(
           vnode,
           insertedVnodeQueue,
