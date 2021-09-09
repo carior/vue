@@ -143,10 +143,13 @@ strats.data = function (
 /**
  * Hooks and props are merged as arrays.
  */
+// strats[key]即strats[hook] 执行 mergeHook 里面的方法
 function mergeHook (
   parentVal: ?Array<Function>,
   childVal: ?Function | ?Array<Function>
 ): ?Array<Function> {
+  // 逻辑就是如果不存在 childVal ，就返回 parentVal；
+  // 否则再判断是否存在 parentVal，如果存在就把 childVal 添加到 parentVal 后返回新数组；否则返回 childVal 的数组。
   const res = childVal
     ? parentVal
       ? parentVal.concat(childVal)
@@ -168,7 +171,9 @@ function dedupeHooks (hooks) {
   }
   return res
 }
-
+// LIFECYCLE_HOOKS 的定义在 src/shared/constants.js 中，指的是各种生命周期的钩子
+// LIFECYCLE_HOOKS 中的钩子函数，他们的合并策略都是 mergeHook 函数。
+// 关于其它属性的合并策略的定义都可以在 src/core/util/options.js 文件中看到
 LIFECYCLE_HOOKS.forEach(hook => {
   strats[hook] = mergeHook
 })
@@ -385,6 +390,8 @@ function assertObjectType (name: string, value: any, vm: ?Component) {
  * Merge two option objects into a new one.
  * Core utility used in both instantiation and inheritance.
  */
+// 主要功能就是把 parent 和 child 这两个对象根据一些合并策略，合并成一个新对象并返回
+// 一旦 parent 和 child 都定义了相同的钩子函数，那么它们会把 2 个钩子函数合并成一个数组。
 export function mergeOptions (
   parent: Object,
   child: Object,
@@ -406,6 +413,7 @@ export function mergeOptions (
   // but only if it is a raw options object that isn't
   // the result of another mergeOptions call.
   // Only merged options has the _base property.
+  // 递归把 extends 和 mixins 合并到 parent 上，
   if (!child._base) {
     if (child.extends) {
       parent = mergeOptions(parent, child.extends, vm)
@@ -419,18 +427,25 @@ export function mergeOptions (
 
   const options = {}
   let key
+  // 然后遍历 parent，调用 mergeField
   for (key in parent) {
     mergeField(key)
   }
+  // 再遍历 child，如果 key 不在 parent 的自身属性上，则调用 mergeField
   for (key in child) {
     if (!hasOwn(parent, key)) {
       mergeField(key)
     }
   }
+  // 对不同的 key 有着不同的合并策略
   function mergeField (key) {
+    // if (key == 'created') {
+    //   debugger
+    // }
     const strat = strats[key] || defaultStrat
     options[key] = strat(parent[key], child[key], vm, key)
   }
+  // console.log(options)
   return options
 }
 

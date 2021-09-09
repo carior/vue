@@ -29,12 +29,16 @@ export function initMixin (Vue: Class<Component>) {
     // 一个避免被发现的标志
     vm._isVue = true
     // merge options 合并配置
+    // 子组件初始化过程通过 initInternalComponent 方式要比外部初始化 Vue 通过 mergeOptions 的过程要快，合并完的结果保留在 vm.$options 中
+    // 纵观一些库、框架的设计几乎都是类似的，自身定义了一些默认配置，同时又可以在初始化阶段传入一些定义配置，然后去 merge 默认配置，来达到定制化不同需求的目的。
     if (options && options._isComponent) {
       // 优化内部组件实例化 因为动态选项合并非常慢，而且没有内部组件选项需要特殊处理
       initInternalComponent(vm, options)
     } else {
       // 这样就把 Vue 上的一些 option 扩展到了 vm.$options 上
       // mergeOptions的功能是把 Vue 构造函数的 options 和用户传入的 options 做一层合并，到 vm.$options 上。
+      // Vue.options 的 定义在 src/core/global-api/index.js 中
+      // mergeOptions 方法定义在 src/core/util/options.js 中
       vm.$options = mergeOptions(
         resolveConstructorOptions(vm.constructor),
         options || {},
@@ -76,14 +80,15 @@ export function initMixin (Vue: Class<Component>) {
   }
 }
 
-// initInternalComponent 合并 options
+// initInternalComponent 合并 options，做了简单一层对象赋值
 export function initInternalComponent (vm: Component, options: InternalComponentOptions) {
+  // 这里的 vm.constructor 就是子组件的构造函数 Sub，相当于 vm.$options = Object.create(Sub.options)。
   const opts = vm.$options = Object.create(vm.constructor.options)
   // doing this because it's faster than dynamic enumeration.
   const parentVnode = options._parentVnode
-  // 下面是把之前我们通过 createComponentInstanceForVnode 函数传入的几个参数合并到内部的选项 $options 里了
-  opts.parent = options.parent // (⭐) 把 parent 存储在 vm.$options 中，在 $mount 之前会调用 initLifecycle(vm) 方法，初始化生命周期
-  opts._parentVnode = parentVnode // (⭐) _parentVnode 就是当前组件的父 VNode
+  // 下面是把之前我们通过 createComponentInstanceForVnode（定义在src\core\vdom\create-component.js） 函数传入的几个参数合并到内部的选项 $options 里了
+  opts.parent = options.parent // (⭐) 把 parent 存储在 vm.$options 中，在 $mount 之前会调用 initLifecycle(vm) 方法，初始化生命周期，parent 是父Vue实例
+  opts._parentVnode = parentVnode // (⭐) _parentVnode 就是当前组件的父 VNode 实例
 
   const vnodeComponentOptions = parentVnode.componentOptions
   opts.propsData = vnodeComponentOptions.propsData

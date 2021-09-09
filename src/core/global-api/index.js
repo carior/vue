@@ -50,8 +50,12 @@ export function initGlobalAPI (Vue: GlobalAPI) {
     observe(obj)
     return obj
   }
-
+  // 创建了 一个空对象
   Vue.options = Object.create(null)
+  // ASSET_TYPES 的定义在 src/shared/constants.js 中
+  // 相当于 Vue.options.components = {}
+  // Vue.options.directives = {}
+  // Vue.options.filters = {}
   ASSET_TYPES.forEach(type => {
     Vue.options[type + 's'] = Object.create(null)
   })
@@ -62,6 +66,8 @@ export function initGlobalAPI (Vue: GlobalAPI) {
   // 实际上在 src/core/instance/init.js 里 Vue 原型上的 _init 函数中有一段逻辑
   Vue.options._base = Vue
 
+  // 把一些内置组件扩展到 Vue.options.components 上
+  // Vue 的内置组件目前有 <keep-alive>、<transition> 和 <transition-group> 组件，这也就是为什么我们在其它组件中使用 <keep-alive> 组件不需要注册的原因
   extend(Vue.options.components, builtInComponents)
 
   initUse(Vue)

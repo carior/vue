@@ -46,6 +46,7 @@ export function initLifecycle (vm: Component) {
     parent.$children.push(vm)
   }
 
+  // vm.$parent 就是用来保留当前 vm 的父实例
   vm.$parent = parent
   vm.$root = parent ? parent.$root : vm
 
@@ -195,11 +196,13 @@ export function mountComponent (
       const endTag = `vue-perf-end:${id}`
 
       mark(startTag)
+      // _render 中 执行了 _createElement
       const vnode = vm._render() // 核心方法(⭐) 它用来把实例渲染成一个虚拟Node。定义在src/core/instance/render.js
       mark(endTag)
       measure(`vue ${name} render`, startTag, endTag)
 
       mark(startTag)
+      // _update 中 patch 执行了 createElm
       vm._update(vnode, hydrating)  // 核心方法(⭐) 把得到的vnode渲染成一个真实的DOM并渲染出来。定义在src/core/instance/lifecycle.js
       mark(endTag)
       measure(`vue ${name} patch`, startTag, endTag)

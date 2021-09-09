@@ -52,6 +52,7 @@ const componentVNodeHooks = {
       // activeInstance 定义在src\core\instance\lifecycle.js 中，作用就是保持当前上下文的 Vue 实例
       // 因为实际上 JavaScript 是一个单线程，Vue 整个初始化是一个深度遍历的过程，
       // 在实例化子组件的过程中，它需要知道当前上下文的 Vue 实例是什么，并把它作为子组件的父 Vue 实例。
+      // 子组件实例化 中它会执行实例的 _init 方法
       const child = vnode.componentInstance = createComponentInstanceForVnode(
         vnode,
         activeInstance
@@ -116,6 +117,7 @@ const hooksToMerge = Object.keys(componentVNodeHooks)
  * 
  * createComponent 方法有3个关键步骤：构造子类构造函数，安装组件钩子函数和实例化 vnode
  * createComponent 函数最后返回的是组件 vnode ，它也一样走到了 vm._update 方法，进而执行了 patch 函数。
+ * createComponent 这个方法是在 createElement 中引用的
  */
 export function createComponent (
   Ctor: Class<Component> | Function | Object | void,
@@ -130,11 +132,14 @@ export function createComponent (
 
   // 这里是 1.构造子类构造函数
   // baseCtor 实际上就是 Vue, 这个的定义是在最开始初始化 Vue 的阶段，在 src/core/global-api/index.js 中的 initGlobalAPI 函数 `Vue.options._base = Vue`
+  // 定义的是 Vue.options 而这里取的是 context.$options
+  // 在 src/core/instance/init.js 里 Vue 原型上的 _init 函数中，有一个 mergeOptions 方法，将 Vue 上的一些 option 扩展到了 vm.$options 上
   const baseCtor = context.$options._base
 
   // plain options object: turn it into a constructor
   if (isObject(Ctor)) {
-    // Vue.extend 函数的定义，在src/core/global-api/extend.js 中。
+    // Vue.extend 函数的定义，在src/core/global-api/extend.js 中,`Vue.options._base = Vue`
+    // 实例化 Sub 的时候，就会执行 this._init 逻辑再次走到了Vue实例化的初始逻辑
     Ctor = baseCtor.extend(Ctor)
   }
 
@@ -231,7 +236,7 @@ export function createComponent (
   return vnode
 }
 
-// 注意这个函数
+// 注意这个函数 目的是子组件初始化 实例化
 export function createComponentInstanceForVnode (
   // we know it's MountedComponentVNode but flow doesn't
   vnode: any,

@@ -1286,10 +1286,13 @@
   /**
    * Hooks and props are merged as arrays.
    */
+  // strats[key]即strats[hook] 执行 mergeHook 里面的方法
   function mergeHook (
     parentVal,
     childVal
   ) {
+    // 逻辑就是如果不存在 childVal ，就返回 parentVal；
+    // 否则再判断是否存在 parentVal，如果存在就把 childVal 添加到 parentVal 后返回新数组；否则返回 childVal 的数组。
     var res = childVal
       ? parentVal
         ? parentVal.concat(childVal)
@@ -1311,7 +1314,9 @@
     }
     return res
   }
-
+  // LIFECYCLE_HOOKS 的定义在 src/shared/constants.js 中，指的是各种生命周期的钩子
+  // LIFECYCLE_HOOKS 中的钩子函数，他们的合并策略都是 mergeHook 函数。
+  // 关于其它属性的合并策略的定义都可以在 src/core/util/options.js 文件中看到
   LIFECYCLE_HOOKS.forEach(function (hook) {
     strats[hook] = mergeHook;
   });
@@ -1528,6 +1533,8 @@
    * Merge two option objects into a new one.
    * Core utility used in both instantiation and inheritance.
    */
+  // 主要功能就是把 parent 和 child 这两个对象根据一些合并策略，合并成一个新对象并返回
+  // 一旦 parent 和 child 都定义了相同的钩子函数，那么它们会把 2 个钩子函数合并成一个数组。
   function mergeOptions (
     parent,
     child,
@@ -1549,6 +1556,7 @@
     // but only if it is a raw options object that isn't
     // the result of another mergeOptions call.
     // Only merged options has the _base property.
+    // 递归把 extends 和 mixins 合并到 parent 上，
     if (!child._base) {
       if (child.extends) {
         parent = mergeOptions(parent, child.extends, vm);
@@ -1562,18 +1570,25 @@
 
     var options = {};
     var key;
+    // 然后遍历 parent，调用 mergeField
     for (key in parent) {
       mergeField(key);
     }
+    // 再遍历 child，如果 key 不在 parent 的自身属性上，则调用 mergeField
     for (key in child) {
       if (!hasOwn(parent, key)) {
         mergeField(key);
       }
     }
+    // 对不同的 key 有着不同的合并策略
     function mergeField (key) {
+      // if (key == 'created') {
+      //   debugger
+      // }
       var strat = strats[key] || defaultStrat;
       options[key] = strat(parent[key], child[key], vm, key);
     }
+    // console.log(options)
     return options
   }
 
@@ -3187,6 +3202,7 @@
         // activeInstance 定义在src\core\instance\lifecycle.js 中，作用就是保持当前上下文的 Vue 实例
         // 因为实际上 JavaScript 是一个单线程，Vue 整个初始化是一个深度遍历的过程，
         // 在实例化子组件的过程中，它需要知道当前上下文的 Vue 实例是什么，并把它作为子组件的父 Vue 实例。
+        // 子组件实例化 中它会执行实例的 _init 方法
         var child = vnode.componentInstance = createComponentInstanceForVnode(
           vnode,
           activeInstance
@@ -3252,6 +3268,7 @@
    * 
    * createComponent 方法有3个关键步骤：构造子类构造函数，安装组件钩子函数和实例化 vnode
    * createComponent 函数最后返回的是组件 vnode ，它也一样走到了 vm._update 方法，进而执行了 patch 函数。
+   * createComponent 这个方法是在 createElement 中引用的
    */
   function createComponent (
     Ctor,
@@ -3266,11 +3283,14 @@
 
     // 这里是 1.构造子类构造函数
     // baseCtor 实际上就是 Vue, 这个的定义是在最开始初始化 Vue 的阶段，在 src/core/global-api/index.js 中的 initGlobalAPI 函数 `Vue.options._base = Vue`
+    // 定义的是 Vue.options 而这里取的是 context.$options
+    // 在 src/core/instance/init.js 里 Vue 原型上的 _init 函数中，有一个 mergeOptions 方法，将 Vue 上的一些 option 扩展到了 vm.$options 上
     var baseCtor = context.$options._base;
 
     // plain options object: turn it into a constructor
     if (isObject(Ctor)) {
-      // Vue.extend 函数的定义，在src/core/global-api/extend.js 中。
+      // Vue.extend 函数的定义，在src/core/global-api/extend.js 中,`Vue.options._base = Vue`
+      // 实例化 Sub 的时候，就会执行 this._init 逻辑再次走到了Vue实例化的初始逻辑
       Ctor = baseCtor.extend(Ctor);
     }
 
@@ -3359,7 +3379,7 @@
     return vnode
   }
 
-  // 注意这个函数
+  // 注意这个函数 目的是子组件初始化 实例化
   function createComponentInstanceForVnode (
     // we know it's MountedComponentVNode but flow doesn't
     vnode,
@@ -4044,6 +4064,7 @@
       parent.$children.push(vm);
     }
 
+    // vm.$parent 就是用来保留当前 vm 的父实例
     vm.$parent = parent;
     vm.$root = parent ? parent.$root : vm;
 
@@ -4193,11 +4214,13 @@
         var endTag = "vue-perf-end:" + id;
 
         mark(startTag);
+        // _render 中 执行了 _createElement
         var vnode = vm._render(); // 核心方法(⭐) 它用来把实例渲染成一个虚拟Node。定义在src/core/instance/render.js
         mark(endTag);
         measure(("vue " + name + " render"), startTag, endTag);
 
         mark(startTag);
+        // _update 中 patch 执行了 createElm
         vm._update(vnode, hydrating);  // 核心方法(⭐) 把得到的vnode渲染成一个真实的DOM并渲染出来。定义在src/core/instance/lifecycle.js
         mark(endTag);
         measure(("vue " + name + " patch"), startTag, endTag);
@@ -5117,12 +5140,16 @@
       // 一个避免被发现的标志
       vm._isVue = true;
       // merge options 合并配置
+      // 子组件初始化过程通过 initInternalComponent 方式要比外部初始化 Vue 通过 mergeOptions 的过程要快，合并完的结果保留在 vm.$options 中
+      // 纵观一些库、框架的设计几乎都是类似的，自身定义了一些默认配置，同时又可以在初始化阶段传入一些定义配置，然后去 merge 默认配置，来达到定制化不同需求的目的。
       if (options && options._isComponent) {
         // 优化内部组件实例化 因为动态选项合并非常慢，而且没有内部组件选项需要特殊处理
         initInternalComponent(vm, options);
       } else {
         // 这样就把 Vue 上的一些 option 扩展到了 vm.$options 上
         // mergeOptions的功能是把 Vue 构造函数的 options 和用户传入的 options 做一层合并，到 vm.$options 上。
+        // Vue.options 的 定义在 src/core/global-api/index.js 中
+        // mergeOptions 方法定义在 src/core/util/options.js 中
         vm.$options = mergeOptions(
           resolveConstructorOptions(vm.constructor),
           options || {},
@@ -5162,14 +5189,15 @@
     };
   }
 
-  // initInternalComponent 合并 options
+  // initInternalComponent 合并 options，做了简单一层对象赋值
   function initInternalComponent (vm, options) {
+    // 这里的 vm.constructor 就是子组件的构造函数 Sub，相当于 vm.$options = Object.create(Sub.options)。
     var opts = vm.$options = Object.create(vm.constructor.options);
     // doing this because it's faster than dynamic enumeration.
     var parentVnode = options._parentVnode;
-    // 下面是把之前我们通过 createComponentInstanceForVnode 函数传入的几个参数合并到内部的选项 $options 里了
-    opts.parent = options.parent; // (⭐) 把 parent 存储在 vm.$options 中，在 $mount 之前会调用 initLifecycle(vm) 方法，初始化生命周期
-    opts._parentVnode = parentVnode; // (⭐) _parentVnode 就是当前组件的父 VNode
+    // 下面是把之前我们通过 createComponentInstanceForVnode（定义在src\core\vdom\create-component.js） 函数传入的几个参数合并到内部的选项 $options 里了
+    opts.parent = options.parent; // (⭐) 把 parent 存储在 vm.$options 中，在 $mount 之前会调用 initLifecycle(vm) 方法，初始化生命周期，parent 是父Vue实例
+    opts._parentVnode = parentVnode; // (⭐) _parentVnode 就是当前组件的父 VNode 实例
 
     var vnodeComponentOptions = parentVnode.componentOptions;
     opts.propsData = vnodeComponentOptions.propsData;
@@ -5283,6 +5311,7 @@
      * Vue.extend 的作用就是构造一个 Vue 的子类，
      * 它使用一种非常经典的原型继承的方式把一个纯对象转换一个继承于 Vue 的构造器 Sub 并返回，
      * 然后对 Sub 这个对象本身扩展了一些属性，如扩展 options、添加全局 API 等；
+     * extendOptions 对应的就是前面定义的组件对象，它会和 Vue.options 合并到 Sub.opitons 中。
      */
     Vue.extend = function (extendOptions) {
       extendOptions = extendOptions || {};
@@ -5596,8 +5625,12 @@
       observe(obj);
       return obj
     };
-
+    // 创建了 一个空对象
     Vue.options = Object.create(null);
+    // ASSET_TYPES 的定义在 src/shared/constants.js 中
+    // 相当于 Vue.options.components = {}
+    // Vue.options.directives = {}
+    // Vue.options.filters = {}
     ASSET_TYPES.forEach(function (type) {
       Vue.options[type + 's'] = Object.create(null);
     });
@@ -5608,6 +5641,8 @@
     // 实际上在 src/core/instance/init.js 里 Vue 原型上的 _init 函数中有一段逻辑
     Vue.options._base = Vue;
 
+    // 把一些内置组件扩展到 Vue.options.components 上
+    // Vue 的内置组件目前有 <keep-alive>、<transition> 和 <transition-group> 组件，这也就是为什么我们在其它组件中使用 <keep-alive> 组件不需要注册的原因
     extend(Vue.options.components, builtInComponents);
 
     initUse(Vue);
@@ -6191,6 +6226,8 @@
         // in that case we can just return the element and be done.
         if (isDef(vnode.componentInstance)) {
           initComponent(vnode, insertedVnodeQueue);
+          // 完成组件的插入
+          // 如果组件 patch 过程中又创建了子组件，那么DOM 的插入顺序是先子后父
           insert(parentElm, vnode.elm, refElm);
           if (isTrue(isReactivated)) {
             reactivateComponent(vnode, insertedVnodeQueue, parentElm, refElm);
