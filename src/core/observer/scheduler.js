@@ -112,12 +112,14 @@ function flushSchedulerQueue () {
 
   // keep copies of post queues before resetting state
   const activatedQueue = activatedChildren.slice()
+  // updatedQueue 是更新了的 wathcer 数组
   const updatedQueue = queue.slice()
 
   resetSchedulerState()
 
   // call component updated and activated hooks
   callActivatedHooks(activatedQueue)
+  // 获取到 updatedQueue
   callUpdatedHooks(updatedQueue)
 
   // devtool hook
@@ -132,6 +134,8 @@ function callUpdatedHooks (queue) {
   while (i--) {
     const watcher = queue[i]
     const vm = watcher.vm
+    // vm._watcher 是专门用来监听 vm 上数据变化然后重新渲染的，所以它是一个渲染相关的 watcher
+    // 只有 vm._watcher 的回调执行完毕后，才会执行 updated 钩子函数
     if (vm._watcher === watcher && vm._isMounted && !vm._isDestroyed) {
       callHook(vm, 'updated')
     }

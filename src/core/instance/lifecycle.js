@@ -103,6 +103,8 @@ export function lifecycleMixin (Vue: Class<Component>) {
     // updated in a parent's updated hook.
   }
 
+  // 调用渲染 watcher 的 update 方法
+  // 让渲染 watcher 对应的回调函数执行，也就是触发了组件的重新渲染。
   Vue.prototype.$forceUpdate = function () {
     const vm: Component = this
     if (vm._watcher) {
@@ -110,6 +112,7 @@ export function lifecycleMixin (Vue: Class<Component>) {
     }
   }
 
+  // 在 destroy 钩子函数中可以做一些定时器销毁工作
   Vue.prototype.$destroy = function () {
     const vm: Component = this
     if (vm._isBeingDestroyed) {
@@ -138,6 +141,8 @@ export function lifecycleMixin (Vue: Class<Component>) {
     // call the last hook...
     vm._isDestroyed = true
     // invoke destroy hooks on current rendered tree
+    // 触发它子组件的销毁钩子函数，这样一层层的递归调用
+    // 所以 destroy 钩子函数执行顺序是先子后父，和 mounted 过程一样
     vm.__patch__(vm._vnode, null)
     // fire destroyed hook
     callHook(vm, 'destroyed')
@@ -183,6 +188,8 @@ export function mountComponent (
       }
     }
   }
+  // beforeMount 钩子函数发生在 mount，也就是 DOM 挂载之前，它的调用时机是在 mountComponent 函数中
+  // 在执行 vm._render() 函数渲染 VNode 之前，执行了 beforeMount 钩子函数
   callHook(vm, 'beforeMount')
 
   // updateComponent方法中，先生成了虚拟DOM vnode，最终调用了vm._update，更新DOM，完成整个渲染工作
@@ -216,12 +223,15 @@ export function mountComponent (
   // we set this to vm._watcher inside the watcher's constructor
   // since the watcher's initial patch may call $forceUpdate (e.g. inside child
   // component's mounted hook), which relies on vm._watcher being already defined
+  // 在组件 mount 的过程中，会实例化一个渲染的 Watcher 去监听 vm 上的数据变化重新渲染
   // Watcher在这里起到两个作用，一个是初始化的时候回执行回调函数，另一个是当vm实例中监测的数据发生变化的时候执行回调函数。
   // noop就是一个空函数
   new Watcher(vm, updateComponent, noop, {
     before () {
       if (vm._isMounted && !vm._isDestroyed) {
+        // beforeUpdate 的执行时机是在渲染 Watcher 的 before 函数中
         callHook(vm, 'beforeUpdate')
+        // update 的执行时机是在 flushSchedulerQueue 函数调用的时候，定义在 src/core/observer/scheduler.js
       }
     }
   }, true /* isRenderWatcher */)
@@ -229,8 +239,13 @@ export function mountComponent (
 
   // manually mounted instance, call mounted on self
   // mounted is called for render-created child components in its inserted hook
-  if (vm.$vnode == null) { // vm.$vnode表示Vue实例的父虚拟Node，所以它为null表示当前是根Vue的实例
-    vm._isMounted = true // 设置_isMounted为true，表示这个实例已经挂载了，同时执行mounted钩子函数
+  // vm.$vnode表示Vue实例的父虚拟Node，所以它为null表示当前是根Vue的实例
+  // 为null则表明这不是一次组件的初始化过程，而是我们通过外部 new Vue 初始化过程。那么对于组件，它的 mounted 时机在哪儿呢？
+  // 执行 invokeInsertHook 的 insert。即 componentVNodeHooks 中的 insert 钩子
+  if (vm.$vnode == null) { 
+    // 设置_isMounted为true，表示这个实例已经挂载了，同时执行mounted钩子函数
+    vm._isMounted = true 
+    // 在执行完 vm._update() 把 VNode patch 到真实 DOM 后，执行 mounted 钩子
     callHook(vm, 'mounted')
   }
   return vm
@@ -358,6 +373,7 @@ export function deactivateChildComponent (vm: Component, direct?: boolean) {
   }
 }
 
+// 就是调用某个生命周期钩子注册的所有回调函数。
 export function callHook (vm: Component, hook: string) {
   // #7573 disable dep collection when invoking lifecycle hooks
   pushTarget()

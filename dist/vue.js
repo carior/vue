@@ -342,6 +342,9 @@
 
   /**
    * Ensure a function is called only once.
+   * 传入一个函数，并返回一个新函数,
+   * 它非常巧妙地利用闭包和一个标志位保证了它包装的函数只会执行一次，
+   * 也就是确保 resolve 和 reject 函数只执行一次。
    */
   function once (fn) {
     var called = false;
@@ -1609,6 +1612,11 @@
     }
     var assets = options[type];
     // check local registration variations first
+    // 先直接使用 id 拿，
+    // 如果不存在，则把 id 变成驼峰的形式再拿，
+    // 如果仍然不存在则在驼峰的基础上把首字母再变成大写的形式再拿，
+    // 如果仍然拿不到则报错
+    // 这样说明了我们在使用 Vue.component(id, definition) 全局注册组件的时候，id 可以是连字符、驼峰或首字母大写的形式
     if (hasOwn(assets, id)) { return assets[id] }
     var camelizedId = camelize(id);
     if (hasOwn(assets, camelizedId)) { return assets[camelizedId] }
@@ -3226,6 +3234,9 @@
       );
     },
 
+    // 每个子组件都是在这个钩子函数中执行 mounted 钩子函数
+    // 并且我们之前分析过，insertedVnodeQueue 的添加顺序是先子后父，所以对于同步渲染的子组件而言，
+    // mounted 钩子函数的执行顺序也是先子后父
     insert: function insert (vnode) {
       var context = vnode.context;
       var componentInstance = vnode.componentInstance;
@@ -3303,10 +3314,12 @@
       return
     }
 
-    // async component
+    // async component 异步组件
     var asyncFactory;
     if (isUndef(Ctor.cid)) {
+      // 进入了异步组件的创建
       asyncFactory = Ctor;
+      // resolveAsyncComponent 的定义在 src/core/vdom/helpers/resolve-async-component.js 中
       Ctor = resolveAsyncComponent(asyncFactory, baseCtor);
       if (Ctor === undefined) {
         // return a placeholder node for async component, which is rendered
@@ -3557,9 +3570,11 @@
           config.parsePlatformTagName(tag), data, children,
           undefined, undefined, context
         );
-      } else if ((!data || !data.pre) && isDef(Ctor = resolveAsset(context.$options, 'components', tag))) { 
+      } else if ((!data || !data.pre) && isDef(Ctor = resolveAsset(context.$options, 'components', tag))) {
+        // 调用 resolveAsset(context.$options, 'components', tag)，即拿 vm.$options.components[tag]
         // 如果是为已注册的组件名，则通过 createComponent 创建一个组件类型的 VNode
-        // component
+        // resolveAsset 定义在 src/core/utils/options.js 中
+        // 在 resolveAsset 的时候拿到这个组件的构造函数，并作为 createComponent 的钩子的参数
         vnode = createComponent(Ctor, data, context, children, tag);
       } else {
         // 否则创建一个未知的标签的 VNode
@@ -3738,6 +3753,8 @@
 
   /*  */
 
+  // 这个函数目的是为了保证能找到异步组件 JS 定义的组件对象，
+  // 并且如果它是一个普通对象，则调用 Vue.extend 把它转换成一个组件的构造函数。
   function ensureCtor (comp, base) {
     if (
       comp.__esModule ||
@@ -3763,6 +3780,8 @@
     return node
   }
 
+  // 逻辑略复杂
+  // 实际上处理了 3 种异步组件的创建方式
   function resolveAsyncComponent (
     factory,
     baseCtor
@@ -3785,7 +3804,9 @@
       return factory.loadingComp
     }
 
+    // 对于 factory.owners 的判断，是考虑到多个地方同时初始化一个异步组件，那么它的实际加载应该只有一次
     if (owner && !isDef(factory.owners)) {
+      // 实际加载逻辑
       var owners = factory.owners = [owner];
       var sync = true;
       var timerLoading = null;
@@ -3794,6 +3815,9 @@
       ;(owner).$on('hook:destroyed', function () { return remove(owners, owner); });
 
       var forceRender = function (renderCompleted) {
+        // 遍历 owners ，拿到每一个调用异步组件的实例 vm, 执行 vm.$forceUpdate() 方法，它的定义在 src/core/instance/lifecycle.js 中
+        // 之所以这么做是因为 Vue 通常是数据驱动视图重新渲染，
+        // 但是在整个异步组件加载过程中是没有数据发生变化的，所以通过执行 $forceUpdate 可以强制组件重新渲染一次。
         for (var i = 0, l = owners.length; i < l; i++) {
           (owners[i]).$forceUpdate();
         }
@@ -3811,6 +3835,8 @@
         }
       };
 
+      // 注意 resolve 和 reject 函数用 once 函数做了一层包装，它的定义在 src/shared/util.js 中
+      // 当组件异步加载成功后，执行 resolve
       var resolve = once(function (res) {
         // cache resolved
         factory.resolved = ensureCtor(res, baseCtor);
@@ -3823,6 +3849,7 @@
         }
       });
 
+      // 加载失败则执行 reject
       var reject = once(function (reason) {
          warn(
           "Failed to resolve async component: " + (String(factory)) +
@@ -3834,10 +3861,14 @@
         }
       });
 
+      // 这块儿就是执行我们组件的工厂函数
+      // 组件的工厂函数通常会先发送请求去加载我们的异步组件的 JS 文件，拿到组件定义的对象 res 后
+      // 执行 resolve(res) 逻辑
       var res = factory(resolve, reject);
 
       if (isObject(res)) {
         if (isPromise(res)) {
+          // 如果是Promise创建的组件 则执行这里
           // () => Promise
           if (isUndef(factory.resolved)) {
             res.then(resolve, reject);
@@ -4121,6 +4152,8 @@
       // updated in a parent's updated hook.
     };
 
+    // 调用渲染 watcher 的 update 方法
+    // 让渲染 watcher 对应的回调函数执行，也就是触发了组件的重新渲染。
     Vue.prototype.$forceUpdate = function () {
       var vm = this;
       if (vm._watcher) {
@@ -4128,6 +4161,7 @@
       }
     };
 
+    // 在 destroy 钩子函数中可以做一些定时器销毁工作
     Vue.prototype.$destroy = function () {
       var vm = this;
       if (vm._isBeingDestroyed) {
@@ -4156,6 +4190,8 @@
       // call the last hook...
       vm._isDestroyed = true;
       // invoke destroy hooks on current rendered tree
+      // 触发它子组件的销毁钩子函数，这样一层层的递归调用
+      // 所以 destroy 钩子函数执行顺序是先子后父，和 mounted 过程一样
       vm.__patch__(vm._vnode, null);
       // fire destroyed hook
       callHook(vm, 'destroyed');
@@ -4201,6 +4237,8 @@
         }
       }
     }
+    // beforeMount 钩子函数发生在 mount，也就是 DOM 挂载之前，它的调用时机是在 mountComponent 函数中
+    // 在执行 vm._render() 函数渲染 VNode 之前，执行了 beforeMount 钩子函数
     callHook(vm, 'beforeMount');
 
     // updateComponent方法中，先生成了虚拟DOM vnode，最终调用了vm._update，更新DOM，完成整个渲染工作
@@ -4234,12 +4272,15 @@
     // we set this to vm._watcher inside the watcher's constructor
     // since the watcher's initial patch may call $forceUpdate (e.g. inside child
     // component's mounted hook), which relies on vm._watcher being already defined
+    // 在组件 mount 的过程中，会实例化一个渲染的 Watcher 去监听 vm 上的数据变化重新渲染
     // Watcher在这里起到两个作用，一个是初始化的时候回执行回调函数，另一个是当vm实例中监测的数据发生变化的时候执行回调函数。
     // noop就是一个空函数
     new Watcher(vm, updateComponent, noop, {
       before: function before () {
         if (vm._isMounted && !vm._isDestroyed) {
+          // beforeUpdate 的执行时机是在渲染 Watcher 的 before 函数中
           callHook(vm, 'beforeUpdate');
+          // update 的执行时机是在 flushSchedulerQueue 函数调用的时候，定义在 src/core/observer/scheduler.js
         }
       }
     }, true /* isRenderWatcher */);
@@ -4247,8 +4288,13 @@
 
     // manually mounted instance, call mounted on self
     // mounted is called for render-created child components in its inserted hook
-    if (vm.$vnode == null) { // vm.$vnode表示Vue实例的父虚拟Node，所以它为null表示当前是根Vue的实例
-      vm._isMounted = true; // 设置_isMounted为true，表示这个实例已经挂载了，同时执行mounted钩子函数
+    // vm.$vnode表示Vue实例的父虚拟Node，所以它为null表示当前是根Vue的实例
+    // 为null则表明这不是一次组件的初始化过程，而是我们通过外部 new Vue 初始化过程。那么对于组件，它的 mounted 时机在哪儿呢？
+    // 执行 invokeInsertHook 的 insert。即 componentVNodeHooks 中的 insert 钩子
+    if (vm.$vnode == null) { 
+      // 设置_isMounted为true，表示这个实例已经挂载了，同时执行mounted钩子函数
+      vm._isMounted = true; 
+      // 在执行完 vm._update() 把 VNode patch 到真实 DOM 后，执行 mounted 钩子
       callHook(vm, 'mounted');
     }
     return vm
@@ -4376,6 +4422,7 @@
     }
   }
 
+  // 就是调用某个生命周期钩子注册的所有回调函数。
   function callHook (vm, hook) {
     // #7573 disable dep collection when invoking lifecycle hooks
     pushTarget();
@@ -4494,12 +4541,14 @@
 
     // keep copies of post queues before resetting state
     var activatedQueue = activatedChildren.slice();
+    // updatedQueue 是更新了的 wathcer 数组
     var updatedQueue = queue.slice();
 
     resetSchedulerState();
 
     // call component updated and activated hooks
     callActivatedHooks(activatedQueue);
+    // 获取到 updatedQueue
     callUpdatedHooks(updatedQueue);
 
     // devtool hook
@@ -4514,6 +4563,8 @@
     while (i--) {
       var watcher = queue[i];
       var vm = watcher.vm;
+      // vm._watcher 是专门用来监听 vm 上数据变化然后重新渲染的，所以它是一个渲染相关的 watcher
+      // 只有 vm._watcher 的回调执行完毕后，才会执行 updated 钩子函数
       if (vm._watcher === watcher && vm._isMounted && !vm._isDestroyed) {
         callHook(vm, 'updated');
       }
@@ -4591,8 +4642,12 @@
   ) {
     this.vm = vm;
     if (isRenderWatcher) {
+      // 接着把当前 watcher 的实例赋值给 vm._watcher
       vm._watcher = this;
     }
+    // 把当前 wathcer 实例 push 到 vm._watchers 中
+    // vm._watcher 是专门用来监听 vm 上数据变化然后重新渲染的，所以它是一个渲染相关的 watcher
+    // 因此在 callUpdatedHooks 函数中，只有 vm._watcher 的回调执行完毕后，才会执行 updated 钩子函数。 
     vm._watchers.push(this);
     // options
     if (options) {
@@ -5165,10 +5220,13 @@
       initLifecycle(vm); // 初始化生命周期
       initEvents(vm); // 初始化事件中心
       initRender(vm); // 初始化渲染
-      callHook(vm, 'beforeCreate');
+      callHook(vm, 'beforeCreate'); // beforeCreate 的钩子函数中就不能获取到 props、data 中定义的值，也不能调用 methods 中定义的函数。
       initInjections(vm); // resolve injections before data/props
       initState(vm); // 初始化 data、props、computed、watcher
       initProvide(vm); // resolve provide after data/props
+      // beforeCreate 和 created 函数执行的时候并没有渲染 DOM，所以我们也不能够访问 DOM
+      // 一般来说，如果组件在加载的时候需要和后端有交互，放在这俩个钩子函数执行都可以，
+      // 如果是需要访问 props、data 等数据的话，就需要使用 created 钩子函数
       callHook(vm, 'created');
 
       /* istanbul ignore if */
@@ -5334,6 +5392,7 @@
       Sub.prototype = Object.create(Super.prototype);
       Sub.prototype.constructor = Sub;
       Sub.cid = cid++;
+      // 把 Vue.options 合并到 Sub.options，也就是组件的 options 上
       Sub.options = mergeOptions(
         Super.options,
         extendOptions
@@ -5413,13 +5472,16 @@
           if ( type === 'component') {
             validateComponentName(id);
           }
+          // Vue.component 函数的定义
           if (type === 'component' && isPlainObject(definition)) {
             definition.name = definition.name || id;
+            // his.options._base.extend 相当于 Vue.extend 把这个对象转换成一个继承于 Vue 的构造函数
             definition = this.options._base.extend(definition);
           }
           if (type === 'directive' && typeof definition === 'function') {
             definition = { bind: definition, update: definition };
           }
+          // 当type为component时，把它挂载到 Vue.options.components 上
           this.options[type + 's'][id] = definition;
           return definition
         }
@@ -6586,6 +6648,7 @@
       }
     }
 
+    // 把 insertedVnodeQueue 里保存的钩子函数依次执行一遍
     function invokeInsertHook (vnode, queue, initial) {
       // delay insert hooks for component root nodes, invoke them after the
       // element is really inserted
@@ -6593,6 +6656,7 @@
         vnode.parent.data.pendingInsert = queue;
       } else {
         for (var i = 0; i < queue.length; ++i) {
+          // 执行 componentVNodeHooks 中insert 钩子函数
           queue[i].data.hook.insert(queue[i]);
         }
       }

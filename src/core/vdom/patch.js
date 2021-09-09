@@ -599,6 +599,7 @@ export function createPatchFunction (backend) {
     }
   }
 
+  // 把 insertedVnodeQueue 里保存的钩子函数依次执行一遍
   function invokeInsertHook (vnode, queue, initial) {
     // delay insert hooks for component root nodes, invoke them after the
     // element is really inserted
@@ -606,6 +607,7 @@ export function createPatchFunction (backend) {
       vnode.parent.data.pendingInsert = queue
     } else {
       for (let i = 0; i < queue.length; ++i) {
+        // 执行 componentVNodeHooks 中insert 钩子函数
         queue[i].data.hook.insert(queue[i])
       }
     }

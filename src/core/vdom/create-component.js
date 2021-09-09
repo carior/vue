@@ -76,6 +76,9 @@ const componentVNodeHooks = {
     )
   },
 
+  // 每个子组件都是在这个钩子函数中执行 mounted 钩子函数
+  // 并且我们之前分析过，insertedVnodeQueue 的添加顺序是先子后父，所以对于同步渲染的子组件而言，
+  // mounted 钩子函数的执行顺序也是先子后父
   insert (vnode: MountedComponentVNode) {
     const { context, componentInstance } = vnode
     if (!componentInstance._isMounted) {
@@ -152,10 +155,12 @@ export function createComponent (
     return
   }
 
-  // async component
+  // async component 异步组件
   let asyncFactory
   if (isUndef(Ctor.cid)) {
+    // 进入了异步组件的创建
     asyncFactory = Ctor
+    // resolveAsyncComponent 的定义在 src/core/vdom/helpers/resolve-async-component.js 中
     Ctor = resolveAsyncComponent(asyncFactory, baseCtor)
     if (Ctor === undefined) {
       // return a placeholder node for async component, which is rendered

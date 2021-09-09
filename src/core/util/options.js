@@ -466,6 +466,11 @@ export function resolveAsset (
   }
   const assets = options[type]
   // check local registration variations first
+  // 先直接使用 id 拿，
+  // 如果不存在，则把 id 变成驼峰的形式再拿，
+  // 如果仍然不存在则在驼峰的基础上把首字母再变成大写的形式再拿，
+  // 如果仍然拿不到则报错
+  // 这样说明了我们在使用 Vue.component(id, definition) 全局注册组件的时候，id 可以是连字符、驼峰或首字母大写的形式
   if (hasOwn(assets, id)) return assets[id]
   const camelizedId = camelize(id)
   if (hasOwn(assets, camelizedId)) return assets[camelizedId]

@@ -15,6 +15,8 @@ import {
 import { createEmptyVNode } from 'core/vdom/vnode'
 import { currentRenderingInstance } from 'core/instance/render'
 
+// 这个函数目的是为了保证能找到异步组件 JS 定义的组件对象，
+// 并且如果它是一个普通对象，则调用 Vue.extend 把它转换成一个组件的构造函数。
 function ensureCtor (comp: any, base) {
   if (
     comp.__esModule ||
@@ -40,6 +42,8 @@ export function createAsyncPlaceholder (
   return node
 }
 
+// 逻辑略复杂
+// 实际上处理了 3 种异步组件的创建方式
 export function resolveAsyncComponent (
   factory: Function,
   baseCtor: Class<Component>
@@ -62,7 +66,9 @@ export function resolveAsyncComponent (
     return factory.loadingComp
   }
 
+  // 对于 factory.owners 的判断，是考虑到多个地方同时初始化一个异步组件，那么它的实际加载应该只有一次
   if (owner && !isDef(factory.owners)) {
+    // 实际加载逻辑
     const owners = factory.owners = [owner]
     let sync = true
     let timerLoading = null
@@ -71,6 +77,9 @@ export function resolveAsyncComponent (
     ;(owner: any).$on('hook:destroyed', () => remove(owners, owner))
 
     const forceRender = (renderCompleted: boolean) => {
+      // 遍历 owners ，拿到每一个调用异步组件的实例 vm, 执行 vm.$forceUpdate() 方法，它的定义在 src/core/instance/lifecycle.js 中
+      // 之所以这么做是因为 Vue 通常是数据驱动视图重新渲染，
+      // 但是在整个异步组件加载过程中是没有数据发生变化的，所以通过执行 $forceUpdate 可以强制组件重新渲染一次。
       for (let i = 0, l = owners.length; i < l; i++) {
         (owners[i]: any).$forceUpdate()
       }
@@ -88,6 +97,8 @@ export function resolveAsyncComponent (
       }
     }
 
+    // 注意 resolve 和 reject 函数用 once 函数做了一层包装，它的定义在 src/shared/util.js 中
+    // 当组件异步加载成功后，执行 resolve
     const resolve = once((res: Object | Class<Component>) => {
       // cache resolved
       factory.resolved = ensureCtor(res, baseCtor)
@@ -100,6 +111,7 @@ export function resolveAsyncComponent (
       }
     })
 
+    // 加载失败则执行 reject
     const reject = once(reason => {
       process.env.NODE_ENV !== 'production' && warn(
         `Failed to resolve async component: ${String(factory)}` +
@@ -111,10 +123,14 @@ export function resolveAsyncComponent (
       }
     })
 
+    // 这块儿就是执行我们组件的工厂函数
+    // 组件的工厂函数通常会先发送请求去加载我们的异步组件的 JS 文件，拿到组件定义的对象 res 后
+    // 执行 resolve(res) 逻辑
     const res = factory(resolve, reject)
 
     if (isObject(res)) {
       if (isPromise(res)) {
+        // 如果是Promise创建的组件 则执行这里
         // () => Promise
         if (isUndef(factory.resolved)) {
           res.then(resolve, reject)

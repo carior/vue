@@ -124,9 +124,11 @@ export function _createElement (
         config.parsePlatformTagName(tag), data, children,
         undefined, undefined, context
       )
-    } else if ((!data || !data.pre) && isDef(Ctor = resolveAsset(context.$options, 'components', tag))) { 
+    } else if ((!data || !data.pre) && isDef(Ctor = resolveAsset(context.$options, 'components', tag))) {
+      // 调用 resolveAsset(context.$options, 'components', tag)，即拿 vm.$options.components[tag]
       // 如果是为已注册的组件名，则通过 createComponent 创建一个组件类型的 VNode
-      // component
+      // resolveAsset 定义在 src/core/utils/options.js 中
+      // 在 resolveAsset 的时候拿到这个组件的构造函数，并作为 createComponent 的钩子的参数
       vnode = createComponent(Ctor, data, context, children, tag)
     } else {
       // 否则创建一个未知的标签的 VNode
