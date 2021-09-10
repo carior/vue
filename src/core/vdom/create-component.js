@@ -161,11 +161,14 @@ export function createComponent (
     // 进入了异步组件的创建
     asyncFactory = Ctor
     // resolveAsyncComponent 的定义在 src/core/vdom/helpers/resolve-async-component.js 中
+    // 如果是第一次执行 resolveAsyncComponent，除非使用高级异步组件 0 delay 去创建了一个 loading 组件，否则返回是 undefiend
+    // 接着通过 createAsyncPlaceholder 创建一个注释节点作为占位符。
     Ctor = resolveAsyncComponent(asyncFactory, baseCtor)
     if (Ctor === undefined) {
       // return a placeholder node for async component, which is rendered
       // as a comment node but preserves all the raw information for the node.
       // the information will be used for async server-rendering and hydration.
+      // 定义在 src/core/vdom/helpers/resolve-async-components.js 中
       return createAsyncPlaceholder(
         asyncFactory,
         data,

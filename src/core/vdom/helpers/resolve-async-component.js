@@ -29,6 +29,7 @@ function ensureCtor (comp: any, base) {
     : comp
 }
 
+// 是创建了一个占位的注释 VNode，同时把 asyncFactory 和 asyncMeta 赋值给当前 vnode
 export function createAsyncPlaceholder (
   factory: Function,
   data: ?VNodeData,
@@ -43,11 +44,16 @@ export function createAsyncPlaceholder (
 }
 
 // 逻辑略复杂
+// 高级异步组件的实现是非常巧妙的，它实现了 loading、resolve、reject、timeout 4 种状态
+// 异步组件实现的本质是 2 次渲染
+// 除了 0 delay 的高级异步组件第一次直接渲染成 loading 组件外，其它都是第一次渲染生成一个注释节点
+// 当异步获取组件成功后，再通过 forceRender 强制重新渲染，这样就能正确渲染出我们异步加载的组件了。
 // 实际上处理了 3 种异步组件的创建方式
 export function resolveAsyncComponent (
   factory: Function,
   baseCtor: Class<Component>
 ): Class<Component> | void {
+  // 返回 factory.errorComp，直接渲染 error 组件
   if (isTrue(factory.error) && isDef(factory.errorComp)) {
     return factory.errorComp
   }
@@ -62,7 +68,9 @@ export function resolveAsyncComponent (
     factory.owners.push(owner)
   }
 
+  // 如果异步组件加载中并未返回，这时候会走到这个逻辑
   if (isTrue(factory.loading) && isDef(factory.loadingComp)) {
+    // 会返回 factory.loadingComp，渲染 loading 组件
     return factory.loadingComp
   }
 
@@ -76,6 +84,10 @@ export function resolveAsyncComponent (
 
     ;(owner: any).$on('hook:destroyed', () => remove(owners, owner))
 
+    // 当执行 forceRender 的时候，会触发组件的重新渲染，
+    // 那么会再一次执行 resolveAsyncComponent 这时候就会根据不同的情况，可能返回 loading、error 或成功加载的异步组件
+    // 返回值不为 undefined，因此就走正常的组件 render、patch 过程，
+    // 与组件第一次渲染流程不一样，这个时候是存在新旧 vnode 的，下一章我会分析组件更新的 patch 过程。
     const forceRender = (renderCompleted: boolean) => {
       // 遍历 owners ，拿到每一个调用异步组件的实例 vm, 执行 vm.$forceUpdate() 方法，它的定义在 src/core/instance/lifecycle.js 中
       // 之所以这么做是因为 Vue 通常是数据驱动视图重新渲染，
@@ -98,7 +110,8 @@ export function resolveAsyncComponent (
     }
 
     // 注意 resolve 和 reject 函数用 once 函数做了一层包装，它的定义在 src/shared/util.js 中
-    // 当组件异步加载成功后，执行 resolve
+    // 当组件异步加载成功后，执行 resolve，首先把加载结果缓存到 factory.resolved 中，这个时候因为 sync 已经为 false，
+    // 则执行 forceRender() 再次执行到 resolveAsyncComponent：
     const resolve = once((res: Object | Class<Component>) => {
       // cache resolved
       factory.resolved = ensureCtor(res, baseCtor)
@@ -112,6 +125,7 @@ export function resolveAsyncComponent (
     })
 
     // 加载失败则执行 reject
+    // 如果超时，则走到了 reject 逻辑，之后逻辑和加载失败一样，渲染 error 组件
     const reject = once(reason => {
       process.env.NODE_ENV !== 'production' && warn(
         `Failed to resolve async component: ${String(factory)}` +
@@ -136,6 +150,7 @@ export function resolveAsyncComponent (
           res.then(resolve, reject)
         }
       } else if (isPromise(res.component)) {
+        // res 就是定义的组件对象
         res.component.then(resolve, reject)
 
         if (isDef(res.error)) {
@@ -151,6 +166,7 @@ export function resolveAsyncComponent (
               timerLoading = null
               if (isUndef(factory.resolved) && isUndef(factory.error)) {
                 factory.loading = true
+                // 如果 delay 配置为 0，则这次直接渲染 loading 组件，否则则延时 delay 执行 forceRende
                 forceRender(false)
               }
             }, res.delay || 200)
