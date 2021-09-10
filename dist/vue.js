@@ -496,6 +496,7 @@
 
   /**
    * Define a property.
+   * def 函数是一个非常简单的Object.defineProperty 的封装
    */
   function def (obj, key, val, enumerable) {
     Object.defineProperty(obj, key, {
@@ -716,12 +717,16 @@
    * A dep is an observable that can have multiple
    * directives subscribing to it.
    */
+  // 是整个 getter 依赖收集的核心，Dep实际上就是对 Watcher 的一种管理
+  // Watcher 定义在 src/core/observer/watcher.js 中
   var Dep = function Dep () {
     this.id = uid++;
     this.subs = [];
   };
 
   Dep.prototype.addSub = function addSub (sub) {
+    // 把当前的 watcher 订阅到这个数据持有的 dep 的 subs 中
+    // 这个目的是为后续数据变化时候能通知到哪些 subs 做准备
     this.subs.push(sub);
   };
 
@@ -730,6 +735,7 @@
   };
 
   Dep.prototype.depend = function depend () {
+    // 如果 Dep.target 已经被赋值为渲染 watcher，那么就执行到 addDep 方法
     if (Dep.target) {
       Dep.target.addDep(this);
     }
@@ -744,6 +750,8 @@
       // order
       subs.sort(function (a, b) { return a.id - b.id; });
     }
+    // 遍历所有的subs，也就是Watcher数组
+    // 然后调用每一个 watcher 的 update 方法
     for (var i = 0, l = subs.length; i < l; i++) {
       subs[i].update();
     }
@@ -755,6 +763,7 @@
   Dep.target = null;
   var targetStack = [];
 
+  // 实际上就是把 Dep.target 赋值为当前的渲染 watcher 并压栈（为了恢复用）
   function pushTarget (target) {
     targetStack.push(target);
     Dep.target = target;
@@ -929,11 +938,16 @@
    * object. Once attached, the observer converts the target
    * object's property keys into getter/setters that
    * collect dependencies and dispatch updates.
+   * Observer 是一个类，它的作用是给对象的属性添加 getter 和 setter，用于依赖收集和派发更新
    */
   var Observer = function Observer (value) {
     this.value = value;
+    // 首先实例化 Dep 对象
     this.dep = new Dep();
     this.vmCount = 0;
+    // 通过执行 def 函数把自身实例添加到数据对象 value 的 __ob__ 属性上
+    // def 的定义在 src/core/util/lang.js
+    // 这就是为什么我在开发中输出 data 上对象类型的数据，会发现该对象多了一个 __ob__ 的属性
     def(value, '__ob__', this);
     if (Array.isArray(value)) {
       if (hasProto) {
@@ -941,6 +955,7 @@
       } else {
         copyAugment(value, arrayMethods, arrayKeys);
       }
+      // 对于数组会调用 observeArray 方法
       this.observeArray(value);
     } else {
       this.walk(value);
@@ -951,6 +966,7 @@
    * Walk through all properties and convert them into
    * getter/setters. This method should only be called when
    * value type is Object.
+   * 纯对象调用 walk 方法
    */
   Observer.prototype.walk = function walk (obj) {
     var keys = Object.keys(obj);
@@ -960,7 +976,8 @@
   };
 
   /**
-   * Observe a list of Array items.
+   * Observe a list of Array items
+   * observeArray 是遍历数组再次调用 observe 方法.
    */
   Observer.prototype.observeArray = function observeArray (items) {
     for (var i = 0, l = items.length; i < l; i++) {
@@ -996,6 +1013,9 @@
    * Attempt to create an observer instance for a value,
    * returns the new observer if successfully observed,
    * or the existing observer if the value already has one.
+   * 方法的作用就是给非 VNode 的对象类型数据添加一个 Observer，
+   * 如果已经添加过则直接返回，
+   * 否则在满足一定条件下去实例化一个 Observer 对象实例
    */
   function observe (value, asRootData) {
     if (!isObject(value) || value instanceof VNode) {
@@ -1021,6 +1041,7 @@
 
   /**
    * Define a reactive property on an Object.
+   * 定义一个响应式对象，给对象动态添加 getter 和 setter
    */
   function defineReactive (
     obj,
@@ -1029,6 +1050,8 @@
     customSetter,
     shallow
   ) {
+    // 函数最开始初始化 Dep 对象的实例
+    // 定义在 src/core/observer/dep.js 中
     var dep = new Dep();
 
     var property = Object.getOwnPropertyDescriptor(obj, key);
@@ -1043,13 +1066,21 @@
       val = obj[key];
     }
 
+    // 接着拿到 obj 的属性描述符，然后对子对象递归调用 observe 方法
+    // 这样就保证了无论 obj 的结构多复杂，它的所有子属性也能变成响应式的对象
+    // 这样我们访问或修改 obj 中一个嵌套较深的属性，也能触发 getter 和 setter
+    // 最后利用 Object.defineProperty 去给 obj 的属性 key 添加 getter 和 setter。
+    // 目的就是为了在我们访问数据以及写数据的时候能自动执行一些逻辑
     var childOb = !shallow && observe(val);
     Object.defineProperty(obj, key, {
       enumerable: true,
       configurable: true,
+      // getter 做的事情是依赖收集
       get: function reactiveGetter () {
         var value = getter ? getter.call(obj) : val;
         if (Dep.target) {
+          // 触发getter后 通过 dep.depend 做依赖收集
+          // 也就会执行 Dep.target.addDep(this)。
           dep.depend();
           if (childOb) {
             childOb.dep.depend();
@@ -1060,6 +1091,7 @@
         }
         return value
       },
+      // setter 做的事情是派发更新
       set: function reactiveSetter (newVal) {
         var value = getter ? getter.call(obj) : val;
         /* eslint-disable no-self-compare */
@@ -1077,7 +1109,9 @@
         } else {
           val = newVal;
         }
+        // 如果 shallow 为 false 的情况，会对新设置的值变成一个响应式对象
         childOb = !shallow && observe(newVal);
+        // 通知所有的订阅者
         dep.notify();
       }
     });
@@ -1949,11 +1983,15 @@
   var callbacks = [];
   var pending = false;
 
+  // nextTick不顾一切的要把 flushCallbacks 放入微任务或者宏任务中去执行
   function flushCallbacks () {
     pending = false;
+    // 把callbacks数组复制一份，然后把callbacks置为空
     var copies = callbacks.slice(0);
     callbacks.length = 0;
     for (var i = 0; i < copies.length; i++) {
+      // 最后把复制出来的数组中的每个函数依次执行一遍
+      // 所以 flushCallbacks 的作用仅仅是用来执行callbacks中的回调函数
       copies[i]();
     }
   }
@@ -1978,6 +2016,13 @@
   // completely stops working after triggering a few times... so, if native
   // Promise is available, we will use it:
   /* istanbul ignore next, $flow-disable-line */
+  // isNative 这是用来判断所传参数是否在当前环境原生就支持
+  // 例如某些浏览器不支持Promise，虽然我们使用了垫片(polify)，但是isNative(Promise)还是会返回false。
+  // 这边代码其实是做了四个判断，对当前环境进行不断的降级处理
+  // 尝试使用原生的Promise.then、MutationObserver和setImmediate，上述三个都不支持最后使用setTimeout；
+  // 降级处理的目的都是将flushCallbacks函数放入微任务(判断1和判断2)或者宏任务(判断3和判断4)，等待下一次事件循环时来执行
+  // MutationObserver 是Html5的一个新特性，用来监听目标DOM结构是否改变，也就是代码中新建的textNode
+  // 如果改变了就执行 MutationObserver 构造函数中的回调函数，不过是它是在微任务中执行的
   if (typeof Promise !== 'undefined' && isNative(Promise)) {
     var p = Promise.resolve();
     timerFunc = function () {
@@ -2023,7 +2068,12 @@
     };
   }
 
+  // - 把回调函数放入callbacks等待执行
+  // - 将执行函数放到微任务或者宏任务中
+  // - 事件循环到了微任务或者宏任务，执行函数依次执行callbacks中的回调
   function nextTick (cb, ctx) {
+    // 在nextTick的外层定义变量就形成了一个闭包
+    // 所以我们每次调用$nextTick的过程其实就是在向callbacks新增回调函数的过程。
     var _resolve;
     callbacks.push(function () {
       if (cb) {
@@ -2036,6 +2086,7 @@
         _resolve(ctx);
       }
     });
+    // pending 用来标识同一个时间只能执行一次。
     if (!pending) {
       pending = true;
       timerFunc();
@@ -4284,6 +4335,7 @@
       };
     } else {
       updateComponent = function () {
+        // 在 vm._render() 过程中，会触发所有数据的 getter，这样实际上已经完成了一个依赖收集的过程。
         vm._update(vm._render(), hydrating);
       };
     }
@@ -4294,6 +4346,7 @@
     // 在组件 mount 的过程中，会实例化一个渲染的 Watcher 去监听 vm 上的数据变化重新渲染
     // Watcher在这里起到两个作用，一个是初始化的时候回执行回调函数，另一个是当vm实例中监测的数据发生变化的时候执行回调函数。
     // noop就是一个空函数
+    // 当我们去实例化一个渲染 watcher 的时候，首先进入 watcher 的构造函数逻辑，然后会执行它的 this.get() 方法，进入 get 函数
     new Watcher(vm, updateComponent, noop, {
       before: function before () {
         if (vm._isMounted && !vm._isDestroyed) {
@@ -4472,6 +4525,7 @@
 
   /**
    * Reset the scheduler's state.
+   * 状态恢复，是把这些控制流程状态的一些变量恢复到初始值，把 watcher 队列清空
    */
   function resetSchedulerState () {
     index = queue.length = activatedChildren.length = 0;
@@ -4515,6 +4569,10 @@
 
   /**
    * Flush both queues and run the watchers.
+   * (⭐)
+   * 1.队列排序
+   * 2.队列遍历
+   * 3.状态恢复
    */
   function flushSchedulerQueue () {
     currentFlushTimestamp = getNow();
@@ -4529,10 +4587,17 @@
     //    user watchers are created before the render watcher)
     // 3. If a component is destroyed during a parent component's watcher run,
     //    its watchers can be skipped.
+    // 对队列做了从小到大的排序
+    // 1.组件的更新由父到子；因为父组件的创建过程是先于子的，所以 watcher 的创建也是先父后子，执行顺序也应该保持先父后子。
+
+    // 2.用户的自定义 watcher 要优先于渲染 watcher 执行；因为用户自定义 watcher 是在渲染 watcher 之前创建的。
+
+    // 3.如果一个组件在父组件的 watcher 执行期间被销毁，那么它对应的 watcher 执行都可以被跳过，所以父组件的 watcher 应该先执行。
     queue.sort(function (a, b) { return a.id - b.id; });
 
     // do not cache length because more watchers might be pushed
     // as we run existing watchers
+    // 对 queue 排序后，接着就是要对它做遍历，拿到对应的 watcher，执行 watcher.run()
     for (index = 0; index < queue.length; index++) {
       watcher = queue[index];
       if (watcher.before) {
@@ -4563,6 +4628,7 @@
     // updatedQueue 是更新了的 wathcer 数组
     var updatedQueue = queue.slice();
 
+    // 状态恢复
     resetSchedulerState();
 
     // call component updated and activated hooks
@@ -4612,9 +4678,13 @@
    * Push a watcher into the watcher queue.
    * Jobs with duplicate IDs will be skipped unless it's
    * pushed when the queue is being flushed.
+   * 这里引入了一个队列的概念，这也是 Vue 在做派发更新的时候的一个优化的点，
+   * 它并不会每次数据改变都触发 watcher 的回调，
+   * 把这些 watcher 先添加到一个队列里，然后在 nextTick 后执行 flushSchedulerQueue。
    */
   function queueWatcher (watcher) {
     var id = watcher.id;
+    // has 对象保证同一个 Watcher 只添加一次
     if (has[id] == null) {
       has[id] = true;
       if (!flushing) {
@@ -4622,6 +4692,9 @@
       } else {
         // if already flushing, splice the watcher based on its id
         // if already past its id, it will be run next immediately.
+        // 在遍历的时候每次都会对 queue.length 求值，因为在 watcher.run() 的时候，很可能用户会再次添加新的 watcher
+        // 然后就会从后往前找，找到第一个待插入 watcher 的 id 比当前队列中 watcher 的 id 大的位置。
+        // 把 watcher 按照 id的插入到队列中，因此 queue 的长度发生了变化。
         var i = queue.length - 1;
         while (i > index && queue[i].id > watcher.id) {
           i--;
@@ -4636,6 +4709,7 @@
           flushSchedulerQueue();
           return
         }
+        // 通过 waiting 保证对 nextTick(flushSchedulerQueue) 的调用逻辑只有一次
         nextTick(flushSchedulerQueue);
       }
     }
@@ -4682,8 +4756,12 @@
     this.id = ++uid$1; // uid for batching
     this.active = true;
     this.dirty = this.lazy; // for lazy watchers
+    // 定义了一些和 Dep 相关的属性
+    // this.deps 和 this.newDeps 表示 Watcher 实例持有的 Dep 实例的数组
     this.deps = [];
     this.newDeps = [];
+    // this.depIds 和 this.newDepIds 分别代表 this.deps 和 this.newDeps 的 id Set
+    // （这个 Set 是 ES6 的数据结构，它的实现在 src/core/util/env.js 中）
     this.depIds = new _Set();
     this.newDepIds = new _Set();
     this.expression =  expOrFn.toString()
@@ -4703,6 +4781,7 @@
         );
       }
     }
+    // new Watcher() 执行它的 this.get() 方法，进入 get 函数
     this.value = this.lazy
       ? undefined
       : this.get();
@@ -4712,10 +4791,16 @@
    * Evaluate the getter, and re-collect dependencies.
    */
   Watcher.prototype.get = function get () {
+    // pushTarget 的定义在 src/core/observer/dep.js 中
     pushTarget(this);
     var value;
     var vm = this.vm;
     try {
+      // this.getter 对应就是 updateComponent 函数
+      // 这实际上就是在执行：vm._update(vm._render(), hydrating)
+      // 它会先执行 vm._render() 方法，因为之前分析过这个方法会生成 渲染 VNode，
+      // 并且在这个过程中会对 vm 上的数据访问，这个时候就触发了数据对象的 getter
+      // 触发getter后 通过 dep.depend 做依赖收集
       value = this.getter.call(vm, vm);
     } catch (e) {
       if (this.user) {
@@ -4726,10 +4811,15 @@
     } finally {
       // "touch" every property so they are all tracked as
       // dependencies for deep watching
+      // 在完成依赖收集后，是要递归去访问 value，触发它所有子项的 getter
       if (this.deep) {
         traverse(value);
       }
+      // 把 Dep.target 恢复成上一个状态，
+      // 因为当前 vm 的数据依赖收集已经完成，那么对应的渲染Dep.target 也需要改变。
+      // popTarget 的定义在 src/core/observer/dep.js 中
       popTarget();
+      // 最后进行依赖清空
       this.cleanupDeps();
     }
     return value
@@ -4744,6 +4834,7 @@
       this.newDepIds.add(id);
       this.newDeps.push(dep);
       if (!this.depIds.has(id)) {
+        // addSub 执行 this.subs.push(sub)
         dep.addSub(this);
       }
     }
@@ -4751,22 +4842,36 @@
 
   /**
    * Clean up for dependency collection.
+   * 依赖清空
+   * 考虑到 Vue 是数据驱动的，所以每次数据变化都会重新 render，
+   * 那么 vm._render() 方法又会再次执行，并再次触发数据的 getters，
+   * 所以 Watcher 在构造函数中会初始化 2 个 Dep 实例数组，
+   * newDeps 表示新添加的 Dep 实例数组，而 deps 表示上一次添加的 Dep 实例数组。
+   * 
+   * Vue 设计了在每次添加完新的订阅，会移除掉旧的订阅，
+   * 这样就保证了在我们刚才的场景中，如果渲染 b 模板的时候去修改 a 模板的数据，a 数据订阅回调已经被移除了，
+   * 所以不会有任何浪费，真的是非常赞叹 Vue 对一些细节上的处理。
    */
   Watcher.prototype.cleanupDeps = function cleanupDeps () {
     var i = this.deps.length;
+    // 首先遍历 deps，移除对 dep.subs 数组中 Wathcer 的订阅
     while (i--) {
       var dep = this.deps[i];
       if (!this.newDepIds.has(dep.id)) {
         dep.removeSub(this);
       }
     }
+    // 然后把 newDepIds 和 depIds 交换
     var tmp = this.depIds;
     this.depIds = this.newDepIds;
     this.newDepIds = tmp;
+    // 把 newDepIds 清空
     this.newDepIds.clear();
+    // newDeps 和 deps 交换
     tmp = this.deps;
     this.deps = this.newDeps;
     this.newDeps = tmp;
+    // 把 newDeps 清空
     this.newDeps.length = 0;
   };
 
@@ -4781,6 +4886,7 @@
     } else if (this.sync) {
       this.run();
     } else {
+      // queueWatcher 的定义在 src/core/observer/scheduler.js
       queueWatcher(this);
     }
   };
@@ -4791,6 +4897,7 @@
    */
   Watcher.prototype.run = function run () {
     if (this.active) {
+      // 会执行 getter 方法
       var value = this.get();
       if (
         value !== this.value ||
@@ -4807,6 +4914,7 @@
           var info = "callback for watcher \"" + (this.expression) + "\"";
           invokeWithErrorHandling(this.cb, this.vm, [value, oldValue], this.vm, info);
         } else {
+          // 这就是当我们添加自定义 watcher 的时候能在回调函数的参数中拿到新旧值的原因。
           this.cb.call(this.vm, value, oldValue);
         }
       }
@@ -4860,6 +4968,8 @@
     set: noop
   };
 
+  // 代理的作用是把 props 和 data 上的属性代理到 vm 实例上，
+  // 这也就是为什么 props/data 的属性 我们可以通过vm实例访问到
   function proxy (target, sourceKey, key) {
     sharedPropertyDefinition.get = function proxyGetter () {
       return this[sourceKey][key]
@@ -4867,9 +4977,12 @@
     sharedPropertyDefinition.set = function proxySetter (val) {
       this[sourceKey][key] = val;
     };
+    // 一旦对象拥有了 getter 和 setter，我们可以简单地把这个对象称为响应式对象。
+    // 将target[sourceKey][key] 的读写变成了对 target[key] 的读写
+    // 所以对于 props 而言，对 vm._props.xxx 的读写变成了 vm.xxx 的读写
     Object.defineProperty(target, key, sharedPropertyDefinition);
   }
-
+  // initState 方法主要是对 props、methods、data、computed 和 wathcer 等属性做了初始化操作
   function initState (vm) {
     vm._watchers = [];
     var opts = vm.$options;
@@ -4886,6 +4999,7 @@
     }
   }
 
+  // 初始化 props 将，props 变成响应式对象
   function initProps (vm, propsOptions) {
     var propsData = vm.$options.propsData || {};
     var props = vm._props = {};
@@ -4910,6 +5024,8 @@
             vm
           );
         }
+        // 一个是调用 defineReactive 方法把每个 prop 对应的值变成响应式
+        // 可以通过 vm._props.xxx 访问到定义 props 中对应的属性
         defineReactive(props, key, value, function () {
           if (!isRoot && !isUpdatingChildComponent) {
             warn(
@@ -4925,6 +5041,7 @@
       // static props are already proxied on the component's prototype
       // during Vue.extend(). We only need to proxy props defined at
       // instantiation here.
+      // 另一个是通过 proxy 把 vm._props.xxx 的访问代理到 vm.xxx 上。
       if (!(key in vm)) {
         proxy(vm, "_props", key);
       }
@@ -4934,6 +5051,10 @@
     toggleObserving(true);
   }
 
+  // 初始化 data data 变成响应式对象
+  // 一个是对定义 data 函数返回对象的遍历，通过 proxy 把每一个值 vm._data.xxx 都代理到 vm.xxx 上；
+  // 另一个是调用 observe 方法观测整个 data 的变化，把 data 也变成响应式
+  // 可以通过 vm._data.xxx 访问到定义 data 返回函数中对应的属性
   function initData (vm) {
     var data = vm.$options.data;
     data = vm._data = typeof data === 'function'
@@ -5239,9 +5360,12 @@
       initLifecycle(vm); // 初始化生命周期
       initEvents(vm); // 初始化事件中心
       initRender(vm); // 初始化渲染
-      callHook(vm, 'beforeCreate'); // beforeCreate 的钩子函数中就不能获取到 props、data 中定义的值，也不能调用 methods 中定义的函数。
-      initInjections(vm); // resolve injections before data/props
-      initState(vm); // 初始化 data、props、computed、watcher
+      // beforeCreate 的钩子函数中就不能获取到 props、data 中定义的值，也不能调用 methods 中定义的函数。
+      callHook(vm, 'beforeCreate'); 
+      // resolve injections before data/props
+      initInjections(vm); 
+       // 初始化 data、props、computed、watcher，定义在src/core/instance/state.js 中
+      initState(vm);
       initProvide(vm); // resolve provide after data/props
       // beforeCreate 和 created 函数执行的时候并没有渲染 DOM，所以我们也不能够访问 DOM
       // 一般来说，如果组件在加载的时候需要和后端有交互，放在这俩个钩子函数执行都可以，

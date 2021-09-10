@@ -10,11 +10,15 @@ export let isUsingMicroTask = false
 const callbacks = []
 let pending = false
 
+// nextTick不顾一切的要把 flushCallbacks 放入微任务或者宏任务中去执行
 function flushCallbacks () {
   pending = false
+  // 把callbacks数组复制一份，然后把callbacks置为空
   const copies = callbacks.slice(0)
   callbacks.length = 0
   for (let i = 0; i < copies.length; i++) {
+    // 最后把复制出来的数组中的每个函数依次执行一遍
+    // 所以 flushCallbacks 的作用仅仅是用来执行callbacks中的回调函数
     copies[i]()
   }
 }
@@ -39,6 +43,13 @@ let timerFunc
 // completely stops working after triggering a few times... so, if native
 // Promise is available, we will use it:
 /* istanbul ignore next, $flow-disable-line */
+// isNative 这是用来判断所传参数是否在当前环境原生就支持
+// 例如某些浏览器不支持Promise，虽然我们使用了垫片(polify)，但是isNative(Promise)还是会返回false。
+// 这边代码其实是做了四个判断，对当前环境进行不断的降级处理
+// 尝试使用原生的Promise.then、MutationObserver和setImmediate，上述三个都不支持最后使用setTimeout；
+// 降级处理的目的都是将flushCallbacks函数放入微任务(判断1和判断2)或者宏任务(判断3和判断4)，等待下一次事件循环时来执行
+// MutationObserver 是Html5的一个新特性，用来监听目标DOM结构是否改变，也就是代码中新建的textNode
+// 如果改变了就执行 MutationObserver 构造函数中的回调函数，不过是它是在微任务中执行的
 if (typeof Promise !== 'undefined' && isNative(Promise)) {
   const p = Promise.resolve()
   timerFunc = () => {
@@ -84,7 +95,12 @@ if (typeof Promise !== 'undefined' && isNative(Promise)) {
   }
 }
 
+// - 把回调函数放入callbacks等待执行
+// - 将执行函数放到微任务或者宏任务中
+// - 事件循环到了微任务或者宏任务，执行函数依次执行callbacks中的回调
 export function nextTick (cb?: Function, ctx?: Object) {
+  // 在nextTick的外层定义变量就形成了一个闭包
+  // 所以我们每次调用$nextTick的过程其实就是在向callbacks新增回调函数的过程。
   let _resolve
   callbacks.push(() => {
     if (cb) {
@@ -97,6 +113,7 @@ export function nextTick (cb?: Function, ctx?: Object) {
       _resolve(ctx)
     }
   })
+  // pending 用来标识同一个时间只能执行一次。
   if (!pending) {
     pending = true
     timerFunc()

@@ -36,6 +36,8 @@ const sharedPropertyDefinition = {
   set: noop
 }
 
+// 代理的作用是把 props 和 data 上的属性代理到 vm 实例上，
+// 这也就是为什么 props/data 的属性 我们可以通过vm实例访问到
 export function proxy (target: Object, sourceKey: string, key: string) {
   sharedPropertyDefinition.get = function proxyGetter () {
     return this[sourceKey][key]
@@ -43,9 +45,12 @@ export function proxy (target: Object, sourceKey: string, key: string) {
   sharedPropertyDefinition.set = function proxySetter (val) {
     this[sourceKey][key] = val
   }
+  // 一旦对象拥有了 getter 和 setter，我们可以简单地把这个对象称为响应式对象。
+  // 将target[sourceKey][key] 的读写变成了对 target[key] 的读写
+  // 所以对于 props 而言，对 vm._props.xxx 的读写变成了 vm.xxx 的读写
   Object.defineProperty(target, key, sharedPropertyDefinition)
 }
-
+// initState 方法主要是对 props、methods、data、computed 和 wathcer 等属性做了初始化操作
 export function initState (vm: Component) {
   vm._watchers = []
   const opts = vm.$options
@@ -62,6 +67,7 @@ export function initState (vm: Component) {
   }
 }
 
+// 初始化 props 将，props 变成响应式对象
 function initProps (vm: Component, propsOptions: Object) {
   const propsData = vm.$options.propsData || {}
   const props = vm._props = {}
@@ -86,6 +92,8 @@ function initProps (vm: Component, propsOptions: Object) {
           vm
         )
       }
+      // 一个是调用 defineReactive 方法把每个 prop 对应的值变成响应式
+      // 可以通过 vm._props.xxx 访问到定义 props 中对应的属性
       defineReactive(props, key, value, () => {
         if (!isRoot && !isUpdatingChildComponent) {
           warn(
@@ -103,6 +111,7 @@ function initProps (vm: Component, propsOptions: Object) {
     // static props are already proxied on the component's prototype
     // during Vue.extend(). We only need to proxy props defined at
     // instantiation here.
+    // 另一个是通过 proxy 把 vm._props.xxx 的访问代理到 vm.xxx 上。
     if (!(key in vm)) {
       proxy(vm, `_props`, key)
     }
@@ -110,6 +119,10 @@ function initProps (vm: Component, propsOptions: Object) {
   toggleObserving(true)
 }
 
+// 初始化 data data 变成响应式对象
+// 一个是对定义 data 函数返回对象的遍历，通过 proxy 把每一个值 vm._data.xxx 都代理到 vm.xxx 上；
+// 另一个是调用 observe 方法观测整个 data 的变化，把 data 也变成响应式
+// 可以通过 vm._data.xxx 访问到定义 data 返回函数中对应的属性
 function initData (vm: Component) {
   let data = vm.$options.data
   data = vm._data = typeof data === 'function'

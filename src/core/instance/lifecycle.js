@@ -216,6 +216,7 @@ export function mountComponent (
     }
   } else {
     updateComponent = () => {
+      // 在 vm._render() 过程中，会触发所有数据的 getter，这样实际上已经完成了一个依赖收集的过程。
       vm._update(vm._render(), hydrating)
     }
   }
@@ -226,6 +227,7 @@ export function mountComponent (
   // 在组件 mount 的过程中，会实例化一个渲染的 Watcher 去监听 vm 上的数据变化重新渲染
   // Watcher在这里起到两个作用，一个是初始化的时候回执行回调函数，另一个是当vm实例中监测的数据发生变化的时候执行回调函数。
   // noop就是一个空函数
+  // 当我们去实例化一个渲染 watcher 的时候，首先进入 watcher 的构造函数逻辑，然后会执行它的 this.get() 方法，进入 get 函数
   new Watcher(vm, updateComponent, noop, {
     before () {
       if (vm._isMounted && !vm._isDestroyed) {

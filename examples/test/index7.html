@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>数据变化</title>
+    <!-- Delete ".min" for console warnings in development -->
+    <!-- <script src="../../dist/vue.min.js"></script> -->
+    <script src="../../dist/vue.js"></script>
+  </head>
+  <body>
+    <div id="app" @click="changeMsg">
+      {{ message }}
+    </div>
+    <script>
+      new Vue({
+        el: '#app',
+        data: {
+          message: 'Hello Vue!'
+        },
+        methods: {
+          changeMsg() {
+            this.message = 'Hello World!'
+          }
+        }
+      })
+    </script>
+  </body>
+</html>

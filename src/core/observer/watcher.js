@@ -73,8 +73,12 @@ export default class Watcher {
     this.id = ++uid // uid for batching
     this.active = true
     this.dirty = this.lazy // for lazy watchers
+    // 定义了一些和 Dep 相关的属性
+    // this.deps 和 this.newDeps 表示 Watcher 实例持有的 Dep 实例的数组
     this.deps = []
     this.newDeps = []
+    // this.depIds 和 this.newDepIds 分别代表 this.deps 和 this.newDeps 的 id Set
+    // （这个 Set 是 ES6 的数据结构，它的实现在 src/core/util/env.js 中）
     this.depIds = new Set()
     this.newDepIds = new Set()
     this.expression = process.env.NODE_ENV !== 'production'
@@ -95,6 +99,7 @@ export default class Watcher {
         )
       }
     }
+    // new Watcher() 执行它的 this.get() 方法，进入 get 函数
     this.value = this.lazy
       ? undefined
       : this.get()
@@ -104,10 +109,16 @@ export default class Watcher {
    * Evaluate the getter, and re-collect dependencies.
    */
   get () {
+    // pushTarget 的定义在 src/core/observer/dep.js 中
     pushTarget(this)
     let value
     const vm = this.vm
     try {
+      // this.getter 对应就是 updateComponent 函数
+      // 这实际上就是在执行：vm._update(vm._render(), hydrating)
+      // 它会先执行 vm._render() 方法，因为之前分析过这个方法会生成 渲染 VNode，
+      // 并且在这个过程中会对 vm 上的数据访问，这个时候就触发了数据对象的 getter
+      // 触发getter后 通过 dep.depend 做依赖收集
       value = this.getter.call(vm, vm)
     } catch (e) {
       if (this.user) {
@@ -118,10 +129,15 @@ export default class Watcher {
     } finally {
       // "touch" every property so they are all tracked as
       // dependencies for deep watching
+      // 在完成依赖收集后，是要递归去访问 value，触发它所有子项的 getter
       if (this.deep) {
         traverse(value)
       }
+      // 把 Dep.target 恢复成上一个状态，
+      // 因为当前 vm 的数据依赖收集已经完成，那么对应的渲染Dep.target 也需要改变。
+      // popTarget 的定义在 src/core/observer/dep.js 中
       popTarget()
+      // 最后进行依赖清空
       this.cleanupDeps()
     }
     return value
@@ -136,6 +152,7 @@ export default class Watcher {
       this.newDepIds.add(id)
       this.newDeps.push(dep)
       if (!this.depIds.has(id)) {
+        // addSub 执行 this.subs.push(sub)
         dep.addSub(this)
       }
     }
@@ -143,22 +160,36 @@ export default class Watcher {
 
   /**
    * Clean up for dependency collection.
+   * 依赖清空
+   * 考虑到 Vue 是数据驱动的，所以每次数据变化都会重新 render，
+   * 那么 vm._render() 方法又会再次执行，并再次触发数据的 getters，
+   * 所以 Watcher 在构造函数中会初始化 2 个 Dep 实例数组，
+   * newDeps 表示新添加的 Dep 实例数组，而 deps 表示上一次添加的 Dep 实例数组。
+   * 
+   * Vue 设计了在每次添加完新的订阅，会移除掉旧的订阅，
+   * 这样就保证了在我们刚才的场景中，如果渲染 b 模板的时候去修改 a 模板的数据，a 数据订阅回调已经被移除了，
+   * 所以不会有任何浪费，真的是非常赞叹 Vue 对一些细节上的处理。
    */
   cleanupDeps () {
     let i = this.deps.length
+    // 首先遍历 deps，移除对 dep.subs 数组中 Wathcer 的订阅
     while (i--) {
       const dep = this.deps[i]
       if (!this.newDepIds.has(dep.id)) {
         dep.removeSub(this)
       }
     }
+    // 然后把 newDepIds 和 depIds 交换
     let tmp = this.depIds
     this.depIds = this.newDepIds
     this.newDepIds = tmp
+    // 把 newDepIds 清空
     this.newDepIds.clear()
+    // newDeps 和 deps 交换
     tmp = this.deps
     this.deps = this.newDeps
     this.newDeps = tmp
+    // 把 newDeps 清空
     this.newDeps.length = 0
   }
 
@@ -173,6 +204,7 @@ export default class Watcher {
     } else if (this.sync) {
       this.run()
     } else {
+      // queueWatcher 的定义在 src/core/observer/scheduler.js
       queueWatcher(this)
     }
   }
@@ -183,6 +215,7 @@ export default class Watcher {
    */
   run () {
     if (this.active) {
+      // 会执行 getter 方法
       const value = this.get()
       if (
         value !== this.value ||
@@ -199,6 +232,7 @@ export default class Watcher {
           const info = `callback for watcher "${this.expression}"`
           invokeWithErrorHandling(this.cb, this.vm, [value, oldValue], this.vm, info)
         } else {
+          // 这就是当我们添加自定义 watcher 的时候能在回调函数的参数中拿到新旧值的原因。
           this.cb.call(this.vm, value, oldValue)
         }
       }
