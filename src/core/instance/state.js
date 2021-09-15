@@ -36,7 +36,7 @@ const sharedPropertyDefinition = {
   set: noop
 }
 
-// 代理的作用是把 props 和 data 上的属性代理到 vm 实例上，
+// 代理(⭐)的作用是把 props 和 data 上的属性代理到 vm 实例上，
 // 这也就是为什么 props/data 的属性 我们可以通过vm实例访问到
 export function proxy (target: Object, sourceKey: string, key: string) {
   sharedPropertyDefinition.get = function proxyGetter () {
@@ -54,10 +54,11 @@ export function proxy (target: Object, sourceKey: string, key: string) {
 export function initState (vm: Component) {
   vm._watchers = []
   const opts = vm.$options
-  if (opts.props) initProps(vm, opts.props)
+  // 重点分析 props 和 data
+  if (opts.props) initProps(vm, opts.props) // (⭐)
   if (opts.methods) initMethods(vm, opts.methods)
   if (opts.data) {
-    initData(vm)
+    initData(vm) // (⭐)
   } else {
     observe(vm._data = {}, true /* asRootData */)
   }
@@ -79,6 +80,7 @@ function initProps (vm: Component, propsOptions: Object) {
   if (!isRoot) {
     toggleObserving(false)
   }
+  // 遍历定义的 props 配置
   for (const key in propsOptions) {
     keys.push(key)
     const value = validateProp(key, propsOptions, propsData, vm)
@@ -94,6 +96,7 @@ function initProps (vm: Component, propsOptions: Object) {
       }
       // 一个是调用 defineReactive 方法把每个 prop 对应的值变成响应式
       // 可以通过 vm._props.xxx 访问到定义 props 中对应的属性
+      // ??? 为啥 props 的初始化不用调用 observe，而是直接调用了defineReactive 
       defineReactive(props, key, value, () => {
         if (!isRoot && !isUpdatingChildComponent) {
           warn(
@@ -120,9 +123,6 @@ function initProps (vm: Component, propsOptions: Object) {
 }
 
 // 初始化 data data 变成响应式对象
-// 一个是对定义 data 函数返回对象的遍历，通过 proxy 把每一个值 vm._data.xxx 都代理到 vm.xxx 上；
-// 另一个是调用 observe 方法观测整个 data 的变化，把 data 也变成响应式
-// 可以通过 vm._data.xxx 访问到定义 data 返回函数中对应的属性
 function initData (vm: Component) {
   let data = vm.$options.data
   data = vm._data = typeof data === 'function'
@@ -158,10 +158,14 @@ function initData (vm: Component) {
         vm
       )
     } else if (!isReserved(key)) {
+      // 对定义 data 函数返回对象的遍历，通过 proxy 把每一个值 vm._data.xxx 都代理到 vm.xxx 上；
+      // 可以通过 vm._data.xxx 访问到定义 data 返回函数中对应的属性
       proxy(vm, `_data`, key)
     }
   }
   // observe data
+  // 调用 observe 方法观测整个 data 的变化，把 data 也变成响应式，定义在 src/core/observer/index.js 中
+  // 先对 data 对象 进行 observe，然后在 Observe 的 walk 方法中 还要对 对象的每个属性进项响应式化
   observe(data, true /* asRootData */)
 }
 

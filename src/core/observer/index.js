@@ -39,14 +39,14 @@ export class Observer {
   value: any;
   dep: Dep;
   vmCount: number; // number of vms that have this object as root $data
-
   constructor (value: any) {
     this.value = value
     // 首先实例化 Dep 对象
+    // Dep 是什么 是干嘛的？  Dep 实际上就是对 Watcher 的一种管理
     this.dep = new Dep()
     this.vmCount = 0
     // 通过执行 def 函数把自身实例添加到数据对象 value 的 __ob__ 属性上
-    // def 的定义在 src/core/util/lang.js
+    // def 的定义在 src/core/util/lang.js，是对 Object.defineProperty 的封装
     // 这就是为什么我在开发中输出 data 上对象类型的数据，会发现该对象多了一个 __ob__ 的属性
     def(value, '__ob__', this)
     if (Array.isArray(value)) {
@@ -71,6 +71,7 @@ export class Observer {
   walk (obj: Object) {
     const keys = Object.keys(obj)
     for (let i = 0; i < keys.length; i++) {
+      // 真正给对象的属性 动态添加 getter 和 setter 在 defineReactive 里
       defineReactive(obj, keys[i])
     }
   }
@@ -114,16 +115,17 @@ function copyAugment (target: Object, src: Object, keys: Array<string>) {
  * Attempt to create an observer instance for a value,
  * returns the new observer if successfully observed,
  * or the existing observer if the value already has one.
- * 方法的作用就是给非 VNode 的对象类型数据添加一个 Observer，
- * 如果已经添加过则直接返回，
- * 否则在满足一定条件下去实例化一个 Observer 对象实例
+ * observe 的功能就是用来监测数据的变化
+ * 方法的作用就是给非 VNode 的对象类型数据添加一个 Observer
  */
 export function observe (value: any, asRootData: ?boolean): Observer | void {
+  // value 不是对象 或者 value 是一个 VNode
   if (!isObject(value) || value instanceof VNode) {
     return
   }
   let ob: Observer | void
   if (hasOwn(value, '__ob__') && value.__ob__ instanceof Observer) {
+    // 如果已经添加过则直接返回
     ob = value.__ob__
   } else if (
     shouldObserve &&
@@ -132,6 +134,8 @@ export function observe (value: any, asRootData: ?boolean): Observer | void {
     Object.isExtensible(value) &&
     !value._isVue
   ) {
+    // 去实例化一个 Observer 对象实例
+    // Observer 是一个类，它的作用是给对象的属性添加 getter 和 setter，用于依赖收集和派发更新：
     ob = new Observer(value)
   }
   if (asRootData && ob) {
@@ -152,10 +156,11 @@ export function defineReactive (
   shallow?: boolean
 ) {
   // 函数最开始初始化 Dep 对象的实例
-  // 定义在 src/core/observer/dep.js 中
+  // Dep 是整个 getter 依赖收集的核心(⭐)，定义在 src/core/observer/dep.js 中
   const dep = new Dep()
 
   const property = Object.getOwnPropertyDescriptor(obj, key)
+  // 当且仅当该属性的 configurable 键值为 true 时，该属性的描述符才能够被改变，同时该属性也能从对应的对象上被删除。
   if (property && property.configurable === false) {
     return
   }
@@ -181,7 +186,7 @@ export function defineReactive (
       const value = getter ? getter.call(obj) : val
       if (Dep.target) {
         // 触发getter后 通过 dep.depend 做依赖收集
-        // 也就会执行 Dep.target.addDep(this)。
+        // 也就会执行 Dep.target.addDep(this)。(⭐)
         dep.depend()
         if (childOb) {
           childOb.dep.depend()

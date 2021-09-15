@@ -718,12 +718,14 @@
    * directives subscribing to it.
    */
   // 是整个 getter 依赖收集的核心，Dep实际上就是对 Watcher 的一种管理
+  // 其实 Watcher 和 Dep 就是一个非常经典的观察者设计模式的实现（pub-sub 发布订阅）
   // Watcher 定义在 src/core/observer/watcher.js 中
   var Dep = function Dep () {
     this.id = uid++;
     this.subs = [];
   };
 
+  // 添加订阅
   Dep.prototype.addSub = function addSub (sub) {
     // 把当前的 watcher 订阅到这个数据持有的 dep 的 subs 中
     // 这个目的是为后续数据变化时候能通知到哪些 subs 做准备
@@ -764,6 +766,7 @@
   var targetStack = [];
 
   // 实际上就是把 Dep.target 赋值为当前的渲染 watcher 并压栈（为了恢复用）
+  // 首次调用是在 Watcher 的 get 方法中
   function pushTarget (target) {
     targetStack.push(target);
     Dep.target = target;
@@ -771,6 +774,7 @@
 
   function popTarget () {
     targetStack.pop();
+    // 实际上就是把 Dep.target 恢复成上一个状态
     Dep.target = targetStack[targetStack.length - 1];
   }
 
@@ -943,10 +947,11 @@
   var Observer = function Observer (value) {
     this.value = value;
     // 首先实例化 Dep 对象
+    // Dep 是什么 是干嘛的？Dep 实际上就是对 Watcher 的一种管理
     this.dep = new Dep();
     this.vmCount = 0;
     // 通过执行 def 函数把自身实例添加到数据对象 value 的 __ob__ 属性上
-    // def 的定义在 src/core/util/lang.js
+    // def 的定义在 src/core/util/lang.js，是对 Object.defineProperty 的封装
     // 这就是为什么我在开发中输出 data 上对象类型的数据，会发现该对象多了一个 __ob__ 的属性
     def(value, '__ob__', this);
     if (Array.isArray(value)) {
@@ -971,6 +976,7 @@
   Observer.prototype.walk = function walk (obj) {
     var keys = Object.keys(obj);
     for (var i = 0; i < keys.length; i++) {
+      // 真正给对象的属性 动态添加 getter 和 setter 在 defineReactive 里
       defineReactive(obj, keys[i]);
     }
   };
@@ -1013,16 +1019,17 @@
    * Attempt to create an observer instance for a value,
    * returns the new observer if successfully observed,
    * or the existing observer if the value already has one.
-   * 方法的作用就是给非 VNode 的对象类型数据添加一个 Observer，
-   * 如果已经添加过则直接返回，
-   * 否则在满足一定条件下去实例化一个 Observer 对象实例
+   * observe 的功能就是用来监测数据的变化
+   * 方法的作用就是给非 VNode 的对象类型数据添加一个 Observer
    */
   function observe (value, asRootData) {
+    // value 不是对象 或者 value 是一个 VNode
     if (!isObject(value) || value instanceof VNode) {
       return
     }
     var ob;
     if (hasOwn(value, '__ob__') && value.__ob__ instanceof Observer) {
+      // 如果已经添加过则直接返回
       ob = value.__ob__;
     } else if (
       shouldObserve &&
@@ -1031,6 +1038,8 @@
       Object.isExtensible(value) &&
       !value._isVue
     ) {
+      // 去实例化一个 Observer 对象实例
+      // Observer 是一个类，它的作用是给对象的属性添加 getter 和 setter，用于依赖收集和派发更新：
       ob = new Observer(value);
     }
     if (asRootData && ob) {
@@ -1051,10 +1060,11 @@
     shallow
   ) {
     // 函数最开始初始化 Dep 对象的实例
-    // 定义在 src/core/observer/dep.js 中
+    // Dep 是整个 getter 依赖收集的核心(⭐)，定义在 src/core/observer/dep.js 中
     var dep = new Dep();
 
     var property = Object.getOwnPropertyDescriptor(obj, key);
+    // 当且仅当该属性的 configurable 键值为 true 时，该属性的描述符才能够被改变，同时该属性也能从对应的对象上被删除。
     if (property && property.configurable === false) {
       return
     }
@@ -1080,7 +1090,7 @@
         var value = getter ? getter.call(obj) : val;
         if (Dep.target) {
           // 触发getter后 通过 dep.depend 做依赖收集
-          // 也就会执行 Dep.target.addDep(this)。
+          // 也就会执行 Dep.target.addDep(this)。(⭐)
           dep.depend();
           if (childOb) {
             childOb.dep.depend();
@@ -4801,6 +4811,7 @@
       // 它会先执行 vm._render() 方法，因为之前分析过这个方法会生成 渲染 VNode，
       // 并且在这个过程中会对 vm 上的数据访问，这个时候就触发了数据对象的 getter
       // 触发getter后 通过 dep.depend 做依赖收集
+      // 然后执行了 Dep.target.addDep(this) ，当前的 Dep.target 已经被赋值为渲染 watcher 了，相当于执行 watcher 的 addDep
       value = this.getter.call(vm, vm);
     } catch (e) {
       if (this.user) {
@@ -4830,11 +4841,14 @@
    */
   Watcher.prototype.addDep = function addDep (dep) {
     var id = dep.id;
+    // 保证同一数据不会被添加多次
     if (!this.newDepIds.has(id)) {
       this.newDepIds.add(id);
       this.newDeps.push(dep);
       if (!this.depIds.has(id)) {
-        // addSub 执行 this.subs.push(sub)
+        // addSub 执行 dep 的 this.subs.push(sub)
+        // 也就是把当前的 watcher 订阅到这个数据持有的 dep 的 subs 中
+        // 这个目的是为后续数据变化时候能通知到哪些 subs 做准备。
         dep.addSub(this);
       }
     }
@@ -4968,7 +4982,7 @@
     set: noop
   };
 
-  // 代理的作用是把 props 和 data 上的属性代理到 vm 实例上，
+  // 代理(⭐)的作用是把 props 和 data 上的属性代理到 vm 实例上，
   // 这也就是为什么 props/data 的属性 我们可以通过vm实例访问到
   function proxy (target, sourceKey, key) {
     sharedPropertyDefinition.get = function proxyGetter () {
@@ -4986,10 +5000,11 @@
   function initState (vm) {
     vm._watchers = [];
     var opts = vm.$options;
-    if (opts.props) { initProps(vm, opts.props); }
+    // 重点分析 props 和 data
+    if (opts.props) { initProps(vm, opts.props); } // (⭐)
     if (opts.methods) { initMethods(vm, opts.methods); }
     if (opts.data) {
-      initData(vm);
+      initData(vm); // (⭐)
     } else {
       observe(vm._data = {}, true /* asRootData */);
     }
@@ -5011,6 +5026,7 @@
     if (!isRoot) {
       toggleObserving(false);
     }
+    // 遍历定义的 props 配置
     var loop = function ( key ) {
       keys.push(key);
       var value = validateProp(key, propsOptions, propsData, vm);
@@ -5026,6 +5042,7 @@
         }
         // 一个是调用 defineReactive 方法把每个 prop 对应的值变成响应式
         // 可以通过 vm._props.xxx 访问到定义 props 中对应的属性
+        // ??? 为啥 props 的初始化不用调用 observe，而是直接调用了defineReactive 
         defineReactive(props, key, value, function () {
           if (!isRoot && !isUpdatingChildComponent) {
             warn(
@@ -5052,9 +5069,6 @@
   }
 
   // 初始化 data data 变成响应式对象
-  // 一个是对定义 data 函数返回对象的遍历，通过 proxy 把每一个值 vm._data.xxx 都代理到 vm.xxx 上；
-  // 另一个是调用 observe 方法观测整个 data 的变化，把 data 也变成响应式
-  // 可以通过 vm._data.xxx 访问到定义 data 返回函数中对应的属性
   function initData (vm) {
     var data = vm.$options.data;
     data = vm._data = typeof data === 'function'
@@ -5090,10 +5104,14 @@
           vm
         );
       } else if (!isReserved(key)) {
+        // 对定义 data 函数返回对象的遍历，通过 proxy 把每一个值 vm._data.xxx 都代理到 vm.xxx 上；
+        // 可以通过 vm._data.xxx 访问到定义 data 返回函数中对应的属性
         proxy(vm, "_data", key);
       }
     }
     // observe data
+    // 调用 observe 方法观测整个 data 的变化，把 data 也变成响应式，定义在 src/core/observer/index.js 中
+    // 先对 data 对象 进行 observe，然后在 Observe 的 walk 方法中 还要对 对象的每个属性进项响应式化
     observe(data, true /* asRootData */);
   }
 

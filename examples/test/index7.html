@@ -13,8 +13,14 @@
     <script>
       new Vue({
         el: '#app',
-        data: {
-          message: 'Hello Vue!'
+        data() {
+          return {
+            message: 'Hello Vue!',
+            name: 'lry'
+          }
+        },
+        props: {
+          test: 'xxx'
         },
         methods: {
           changeMsg() {

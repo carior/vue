@@ -119,6 +119,7 @@ export default class Watcher {
       // 它会先执行 vm._render() 方法，因为之前分析过这个方法会生成 渲染 VNode，
       // 并且在这个过程中会对 vm 上的数据访问，这个时候就触发了数据对象的 getter
       // 触发getter后 通过 dep.depend 做依赖收集
+      // 然后执行了 Dep.target.addDep(this) ，当前的 Dep.target 已经被赋值为渲染 watcher 了，相当于执行 watcher 的 addDep
       value = this.getter.call(vm, vm)
     } catch (e) {
       if (this.user) {
@@ -148,11 +149,14 @@ export default class Watcher {
    */
   addDep (dep: Dep) {
     const id = dep.id
+    // 保证同一数据不会被添加多次
     if (!this.newDepIds.has(id)) {
       this.newDepIds.add(id)
       this.newDeps.push(dep)
       if (!this.depIds.has(id)) {
-        // addSub 执行 this.subs.push(sub)
+        // addSub 执行 dep 的 this.subs.push(sub)
+        // 也就是把当前的 watcher 订阅到这个数据持有的 dep 的 subs 中
+        // 这个目的是为后续数据变化时候能通知到哪些 subs 做准备。
         dep.addSub(this)
       }
     }
