@@ -57,7 +57,7 @@ export default class Watcher {
     }
     // 把当前 wathcer 实例 push 到 vm._watchers 中
     // vm._watcher 是专门用来监听 vm 上数据变化然后重新渲染的，所以它是一个渲染相关的 watcher
-    // 因此在 callUpdatedHooks 函数中，只有 vm._watcher 的回调执行完毕后，才会执行 updated 钩子函数。 
+    // 因此在 callUpdatedHooks 函数中，只有 vm._watcher 的回调执行完毕后，才会执行 updated 钩子函数。
     vm._watchers.push(this)
     // options
     if (options) {
@@ -169,7 +169,7 @@ export default class Watcher {
    * 那么 vm._render() 方法又会再次执行，并再次触发数据的 getters，
    * 所以 Watcher 在构造函数中会初始化 2 个 Dep 实例数组，
    * newDeps 表示新添加的 Dep 实例数组，而 deps 表示上一次添加的 Dep 实例数组。
-   * 
+   *
    * Vue 设计了在每次添加完新的订阅，会移除掉旧的订阅，
    * 这样就保证了在我们刚才的场景中，如果渲染 b 模板的时候去修改 a 模板的数据，a 数据订阅回调已经被移除了，
    * 所以不会有任何浪费，真的是非常赞叹 Vue 对一些细节上的处理。

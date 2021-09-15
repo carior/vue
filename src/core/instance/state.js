@@ -96,7 +96,7 @@ function initProps (vm: Component, propsOptions: Object) {
       }
       // 一个是调用 defineReactive 方法把每个 prop 对应的值变成响应式
       // 可以通过 vm._props.xxx 访问到定义 props 中对应的属性
-      // ??? 为啥 props 的初始化不用调用 observe，而是直接调用了defineReactive 
+      // 为啥 props 的初始化不用调用 observe，而是直接调用了defineReactive ??? 因为props 遍历的是属性，data是对象
       defineReactive(props, key, value, () => {
         if (!isRoot && !isUpdatingChildComponent) {
           warn(
