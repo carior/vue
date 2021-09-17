@@ -63,9 +63,11 @@ export function initMixin (Vue: Class<Component>) {
      // 初始化 data、props、computed、watcher，定义在src/core/instance/state.js 中
     initState(vm)
     initProvide(vm) // resolve provide after data/props
-    // beforeCreate 和 created 函数执行的时候并没有渲染 DOM，所以我们也不能够访问 DOM
+    // beforeCreate 和 created 函数执行的时候并没有渲染 DOM，所以我们也不能够访问 DOM, 所以此处一定要将DOM操作的js代码放进Vue.nextTick()的回调函数中
     // 一般来说，如果组件在加载的时候需要和后端有交互，放在这俩个钩子函数执行都可以，
-    // 如果是需要访问 props、data 等数据的话，就需要使用 created 钩子函数
+    // 如果是需要访问 props、data 等数据的话，就需要使用 created 钩子函数, 而不能用 beforeCreate
+    // 与之对应的就是 mounted() 钩子函数，因为该钩子函数执行时所有的DOM挂载和渲染都已完成，此时在该钩子函数中进行任何DOM操作都不会有问题
+    // mounted 在 lifecycle 中执行的
     callHook(vm, 'created')
 
     /* istanbul ignore if */

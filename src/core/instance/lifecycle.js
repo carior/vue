@@ -216,7 +216,7 @@ export function mountComponent (
     }
   } else {
     updateComponent = () => {
-      // 在 vm._render() 过程中，会触发所有数据的 getter，这样实际上已经完成了一个依赖收集的过程。
+      // 在 vm._render() 过程中，会触发所有数据的 getter？？在哪可以看到，这样实际上已经完成了一个依赖收集的过程。
       vm._update(vm._render(), hydrating)
     }
   }

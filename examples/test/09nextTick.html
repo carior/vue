@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>vue test</title>
+    <script src="../../dist/vue.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <div ref="msgDiv">{{msg}}</div>
+      <div v-if="msg1">Message got outside $nextTick: {{msg1}}</div>
+      <div v-if="msg2">Message got inside $nextTick: {{msg2}}</div>
+      <div v-if="msg3">Message got outside $nextTick: {{msg3}}</div>
+      <button @click="changeMsg">
+        Change the Message
+      </button>
+    </div>
+    <script>
+      new Vue({
+        el: '#app',
+        data: {
+          msg: 'Hello Vue.',
+          msg1: '',
+          msg2: '',
+          msg3: ''
+        },
+        methods: {
+          changeMsg() {
+            // - vue中dom的更像并不是实时的，当数据改变后，vue会把渲染watcher添加到异步队列，异步执行，
+            // 同步代码执行完成后再统一修改dom
+            // - vue项目中如果需要获取修改后的dom信息，需要通过nextTick在dom更新任务之后创建一个异步任务
+            this.msg = "Hello world."
+            this.msg1 = this.$refs.msgDiv.innerHTML
+            this.$nextTick(() => {
+              this.msg2 = this.$refs.msgDiv.innerHTML
+            })
+            this.msg3 = this.$refs.msgDiv.innerHTML
+          }
+        }
+      })
+    </script>
+  </body>
+</html>

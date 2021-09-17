@@ -110,6 +110,7 @@ export default class Watcher {
    */
   get () {
     // pushTarget 的定义在 src/core/observer/dep.js 中
+    // 此时就和 Dep 发布者产生了联系，Dep 的 target 被设置为了这个 wacher，并且在每次监测对象被 get 时，就会往自身的 Dep 里推入这个 wacher
     pushTarget(this)
     let value
     const vm = this.vm
@@ -146,6 +147,7 @@ export default class Watcher {
 
   /**
    * Add a dependency to this directive.
+   * 添加一个依赖项
    */
   addDep (dep: Dep) {
     const id = dep.id
@@ -200,6 +202,7 @@ export default class Watcher {
   /**
    * Subscriber interface.
    * Will be called when a dependency changes.
+   * update接收到dep发出的广播之后调用 queueWatcher
    */
   update () {
     /* istanbul ignore else */
@@ -219,7 +222,7 @@ export default class Watcher {
    */
   run () {
     if (this.active) {
-      // 会执行 getter 方法
+      // 对于渲染 watcher 而言，它在执行 this.get() 方法求值的时候，会执行 getter 方法
       const value = this.get()
       if (
         value !== this.value ||

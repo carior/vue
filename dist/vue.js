@@ -1090,7 +1090,10 @@
         var value = getter ? getter.call(obj) : val;
         if (Dep.target) {
           // 触发getter后 通过 dep.depend 做依赖收集
-          // 也就会执行 Dep.target.addDep(this)。(⭐)
+          // 也就会执行 Dep.target.addDep(this)。(⭐) this 是 传入的 watcher
+          // 也就会执行到 dep.addSub(this) this 是传入的watcher
+          // 也就是 this.subs.push(sub) 这里的 this 是 Dep， sub是传入的watcher
+          // 最终其实是把 watcher 传入到 subs 里面去，也就是对应的 Dep 对象中去
           dep.depend();
           if (childOb) {
             childOb.dep.depend();
@@ -1105,6 +1108,7 @@
       set: function reactiveSetter (newVal) {
         var value = getter ? getter.call(obj) : val;
         /* eslint-disable no-self-compare */
+        // 如果两次的值相等 什么也不做
         if (newVal === value || (newVal !== newVal && value !== value)) {
           return
         }
@@ -1120,6 +1124,7 @@
           val = newVal;
         }
         // 如果 shallow 为 false 的情况，会对新设置的值变成一个响应式对象
+        // 如果发现新值又是一个对象，那么将其变成响应式的
         childOb = !shallow && observe(newVal);
         // 通知所有的订阅者
         dep.notify();
@@ -1988,12 +1993,23 @@
 
   /*  */
 
+  /**
+   * 主线程的执行过程就是一个 tick，而所有的异步结果都是通过 “任务队列” 来调度。 
+   * 消息队列中存放的是一个个的任务（task）。 
+   * 规范中规定 task 分为两大类，分别是 macro task 和 micro task，并且每个 macro task 结束后，都要清空所有的 micro task
+   */
+
   var isUsingMicroTask = false;
 
+  // callbacks 用来存储所有需要执行的回调函数
+  // callbacks 而不是直接在 nextTick 中执行回调函数的原因是保证在同一个 tick 内多次执行 nextTick，
+  // 不会开启多个异步任务，而把这些异步任务都压成一个同步任务，在下一个 tick 执行完毕。
   var callbacks = [];
+  // pending 用来标志是否正在执行回调函数
   var pending = false;
 
   // nextTick不顾一切的要把 flushCallbacks 放入微任务或者宏任务中去执行
+  // 这个函数用来执行callbacks里存储的所有回调函数
   function flushCallbacks () {
     pending = false;
     // 把callbacks数组复制一份，然后把callbacks置为空
@@ -2006,42 +2022,20 @@
     }
   }
 
-  // Here we have async deferring wrappers using microtasks.
-  // In 2.5 we used (macro) tasks (in combination with microtasks).
-  // However, it has subtle problems when state is changed right before repaint
-  // (e.g. #6813, out-in transitions).
-  // Also, using (macro) tasks in event handler would cause some weird behaviors
-  // that cannot be circumvented (e.g. #7109, #7153, #7546, #7834, #8109).
-  // So we now use microtasks everywhere, again.
-  // A major drawback of this tradeoff is that there are some scenarios
-  // where microtasks have too high a priority and fire in between supposedly
-  // sequential events (e.g. #4521, #6690, which have workarounds)
-  // or even between bubbling of the same event (#6566).
+  // timerFunc 用来触发执行回调函数
   var timerFunc;
-
-  // The nextTick behavior leverages the microtask queue, which can be accessed
-  // via either native Promise.then or MutationObserver.
-  // MutationObserver has wider support, however it is seriously bugged in
-  // UIWebView in iOS >= 9.3.3 when triggered in touch event handlers. It
-  // completely stops working after triggering a few times... so, if native
-  // Promise is available, we will use it:
-  /* istanbul ignore next, $flow-disable-line */
   // isNative 这是用来判断所传参数是否在当前环境原生就支持
   // 例如某些浏览器不支持Promise，虽然我们使用了垫片(polify)，但是isNative(Promise)还是会返回false。
   // 这边代码其实是做了四个判断，对当前环境进行不断的降级处理
   // 尝试使用原生的Promise.then、MutationObserver和setImmediate，上述三个都不支持最后使用setTimeout；
   // 降级处理的目的都是将flushCallbacks函数放入微任务(判断1和判断2)或者宏任务(判断3和判断4)，等待下一次事件循环时来执行
-  // MutationObserver 是Html5的一个新特性，用来监听目标DOM结构是否改变，也就是代码中新建的textNode
-  // 如果改变了就执行 MutationObserver 构造函数中的回调函数，不过是它是在微任务中执行的
+
+  // 接下来是将触发方式赋值给timerFunc。
+  // 1.先判断是否原生支持promise，如果支持，则利用promise来触发执行回调函数；
   if (typeof Promise !== 'undefined' && isNative(Promise)) {
     var p = Promise.resolve();
     timerFunc = function () {
       p.then(flushCallbacks);
-      // In problematic UIWebViews, Promise.then doesn't completely break, but
-      // it can get stuck in a weird state where callbacks are pushed into the
-      // microtask queue but the queue isn't being flushed, until the browser
-      // needs to do some other work, e.g. handle a timer. Therefore we can
-      // "force" the microtask queue to be flushed by adding an empty timer.
       if (isIOS) { setTimeout(noop); }
     };
     isUsingMicroTask = true;
@@ -2050,9 +2044,9 @@
     // PhantomJS and iOS 7.x
     MutationObserver.toString() === '[object MutationObserverConstructor]'
   )) {
-    // Use MutationObserver where native Promise is not available,
-    // e.g. PhantomJS, iOS7, Android 4.4
-    // (#6466 MutationObserver is unreliable in IE11)
+    // 2.如果支持 MutationObserver ，则实例化一个观察者对象，观察文本节点发生变化时，触发执行所有回调函数
+    // MutationObserver是HTML5中的新API，是个用来监视DOM变动的接口。他能监听一个DOM对象上发生的子节点删除、属性修改、文本内容修改等等。
+    // 如果改变了就执行 MutationObserver 构造函数中的回调函数，不过是它是在微任务中执行的
     var counter = 1;
     var observer = new MutationObserver(flushCallbacks);
     var textNode = document.createTextNode(String(counter));
@@ -2065,22 +2059,20 @@
     };
     isUsingMicroTask = true;
   } else if (typeof setImmediate !== 'undefined' && isNative(setImmediate)) {
-    // Fallback to setImmediate.
-    // Technically it leverages the (macro) task queue,
-    // but it is still a better choice than setTimeout.
+    // 3.setImmediate
     timerFunc = function () {
       setImmediate(flushCallbacks);
     };
   } else {
+    // 4.如果都不支持，则利用setTimeout设置延时为0
     // Fallback to setTimeout.
     timerFunc = function () {
       setTimeout(flushCallbacks, 0);
     };
   }
 
-  // - 把回调函数放入callbacks等待执行
-  // - 将执行函数放到微任务或者宏任务中
-  // - 事件循环到了微任务或者宏任务，执行函数依次执行callbacks中的回调
+  // 在数据变化后要执行的某个操作，而这个操作需要使用随数据改变而改变的DOM结构的时候，这个操作都应该放进Vue.nextTick()的回调函数中
+  // Vue.nextTick用于延迟执行一段代码，它接受2个参数（回调函数和执行回调函数的上下文环境），如果没有提供回调函数，那么将返回promise对象。
   function nextTick (cb, ctx) {
     // 在nextTick的外层定义变量就形成了一个闭包
     // 所以我们每次调用$nextTick的过程其实就是在向callbacks新增回调函数的过程。
@@ -3725,6 +3717,7 @@
     var parentData = parentVnode && parentVnode.data;
 
     /* istanbul ignore else */
+    // defineReactive 最后一个参数 表示是否是一个对象
     {
       defineReactive(vm, '$attrs', parentData && parentData.attrs || emptyObject, function () {
         !isUpdatingChildComponent && warn("$attrs is readonly.", vm);
@@ -4345,7 +4338,7 @@
       };
     } else {
       updateComponent = function () {
-        // 在 vm._render() 过程中，会触发所有数据的 getter，这样实际上已经完成了一个依赖收集的过程。
+        // 在 vm._render() 过程中，会触发所有数据的 getter？？在哪可以看到，这样实际上已经完成了一个依赖收集的过程。
         vm._update(vm._render(), hydrating);
       };
     }
@@ -4610,11 +4603,14 @@
     // 对 queue 排序后，接着就是要对它做遍历，拿到对应的 watcher，执行 watcher.run()
     for (index = 0; index < queue.length; index++) {
       watcher = queue[index];
+      // 对每一个queue成员（watcher）调用了before方法，即在实例化watcher时传入的，并通知用户开始进行更新流程
       if (watcher.before) {
         watcher.before();
       }
       id = watcher.id;
       has[id] = null;
+      // 遍历执行渲染watcher的run方法 完成视图更新
+      // 一次事件循环中的多次数据修改只会触发一次watcher.run()
       watcher.run();
       // in dev build, check and stop circular updates.
       if ( has[id] != null) {
@@ -4635,7 +4631,7 @@
 
     // keep copies of post queues before resetting state
     var activatedQueue = activatedChildren.slice();
-    // updatedQueue 是更新了的 wathcer 数组
+    // updatedQueue 是更新了的 wathcer 数组, 复制一个queue数组
     var updatedQueue = queue.slice();
 
     // 状态恢复
@@ -4691,6 +4687,9 @@
    * 这里引入了一个队列的概念，这也是 Vue 在做派发更新的时候的一个优化的点，
    * 它并不会每次数据改变都触发 watcher 的回调，
    * 把这些 watcher 先添加到一个队列里，然后在 nextTick 后执行 flushSchedulerQueue。
+   * 如果同一个 watcher 被多次触发，只会被推入到队列中一次。这种在缓冲时去除重复数据对于避免不必要的计算和 DOM 操作上非常重要。
+   * 然后，在下一个的事件循环“tick”中，Vue 刷新队列并执行实际 (已去重的) 工作。
+   * 数据的变化到 DOM 的重新渲染是一个异步过程，发生在下一个 tick
    */
   function queueWatcher (watcher) {
     var id = watcher.id;
@@ -4713,6 +4712,7 @@
       }
       // queue the flush
       if (!waiting) {
+        // 通过waiting 保证nextTick只执行一次
         waiting = true;
 
         if ( !config.async) {
@@ -4720,6 +4720,7 @@
           return
         }
         // 通过 waiting 保证对 nextTick(flushSchedulerQueue) 的调用逻辑只有一次
+        // 等同于setTimeout(flushSchedulerQueue, 0)，会异步执行flushSchedulerQueue函数
         nextTick(flushSchedulerQueue);
       }
     }
@@ -4802,6 +4803,7 @@
    */
   Watcher.prototype.get = function get () {
     // pushTarget 的定义在 src/core/observer/dep.js 中
+    // 此时就和 Dep 发布者产生了联系，Dep 的 target 被设置为了这个 wacher，并且在每次监测对象被 get 时，就会往自身的 Dep 里推入这个 wacher
     pushTarget(this);
     var value;
     var vm = this.vm;
@@ -4838,6 +4840,7 @@
 
   /**
    * Add a dependency to this directive.
+   * 添加一个依赖项
    */
   Watcher.prototype.addDep = function addDep (dep) {
     var id = dep.id;
@@ -4892,6 +4895,7 @@
   /**
    * Subscriber interface.
    * Will be called when a dependency changes.
+   * update接收到dep发出的广播之后调用 queueWatcher
    */
   Watcher.prototype.update = function update () {
     /* istanbul ignore else */
@@ -4911,7 +4915,7 @@
    */
   Watcher.prototype.run = function run () {
     if (this.active) {
-      // 会执行 getter 方法
+      // 对于渲染 watcher 而言，它在执行 this.get() 方法求值的时候，会执行 getter 方法
       var value = this.get();
       if (
         value !== this.value ||
@@ -5385,9 +5389,11 @@
        // 初始化 data、props、computed、watcher，定义在src/core/instance/state.js 中
       initState(vm);
       initProvide(vm); // resolve provide after data/props
-      // beforeCreate 和 created 函数执行的时候并没有渲染 DOM，所以我们也不能够访问 DOM
+      // beforeCreate 和 created 函数执行的时候并没有渲染 DOM，所以我们也不能够访问 DOM, 所以此处一定要将DOM操作的js代码放进Vue.nextTick()的回调函数中
       // 一般来说，如果组件在加载的时候需要和后端有交互，放在这俩个钩子函数执行都可以，
-      // 如果是需要访问 props、data 等数据的话，就需要使用 created 钩子函数
+      // 如果是需要访问 props、data 等数据的话，就需要使用 created 钩子函数, 而不能用 beforeCreate
+      // 与之对应的就是 mounted() 钩子函数，因为该钩子函数执行时所有的DOM挂载和渲染都已完成，此时在该钩子函数中进行任何DOM操作都不会有问题
+      // mounted 在 lifecycle 中执行的
       callHook(vm, 'created');
 
       /* istanbul ignore if */

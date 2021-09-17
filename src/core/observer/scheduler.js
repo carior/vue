@@ -99,11 +99,14 @@ function flushSchedulerQueue () {
   // 对 queue 排序后，接着就是要对它做遍历，拿到对应的 watcher，执行 watcher.run()
   for (index = 0; index < queue.length; index++) {
     watcher = queue[index]
+    // 对每一个queue成员（watcher）调用了before方法，即在实例化watcher时传入的，并通知用户开始进行更新流程
     if (watcher.before) {
       watcher.before()
     }
     id = watcher.id
     has[id] = null
+    // 遍历执行渲染watcher的run方法 完成视图更新
+    // 一次事件循环中的多次数据修改只会触发一次watcher.run()
     watcher.run()
     // in dev build, check and stop circular updates.
     if (process.env.NODE_ENV !== 'production' && has[id] != null) {
@@ -124,7 +127,7 @@ function flushSchedulerQueue () {
 
   // keep copies of post queues before resetting state
   const activatedQueue = activatedChildren.slice()
-  // updatedQueue 是更新了的 wathcer 数组
+  // updatedQueue 是更新了的 wathcer 数组, 复制一个queue数组
   const updatedQueue = queue.slice()
 
   // 状态恢复
@@ -180,6 +183,9 @@ function callActivatedHooks (queue) {
  * 这里引入了一个队列的概念，这也是 Vue 在做派发更新的时候的一个优化的点，
  * 它并不会每次数据改变都触发 watcher 的回调，
  * 把这些 watcher 先添加到一个队列里，然后在 nextTick 后执行 flushSchedulerQueue。
+ * 如果同一个 watcher 被多次触发，只会被推入到队列中一次。这种在缓冲时去除重复数据对于避免不必要的计算和 DOM 操作上非常重要。
+ * 然后，在下一个的事件循环“tick”中，Vue 刷新队列并执行实际 (已去重的) 工作。
+ * 数据的变化到 DOM 的重新渲染是一个异步过程，发生在下一个 tick
  */
 export function queueWatcher (watcher: Watcher) {
   const id = watcher.id
@@ -202,6 +208,7 @@ export function queueWatcher (watcher: Watcher) {
     }
     // queue the flush
     if (!waiting) {
+      // 通过waiting 保证nextTick只执行一次
       waiting = true
 
       if (process.env.NODE_ENV !== 'production' && !config.async) {
@@ -209,6 +216,7 @@ export function queueWatcher (watcher: Watcher) {
         return
       }
       // 通过 waiting 保证对 nextTick(flushSchedulerQueue) 的调用逻辑只有一次
+      // 等同于setTimeout(flushSchedulerQueue, 0)，会异步执行flushSchedulerQueue函数
       nextTick(flushSchedulerQueue)
     }
   }

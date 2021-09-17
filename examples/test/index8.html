@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>vue test</title>
+    <!-- Delete ".min" for console warnings in development -->
+    <!-- <script src="../../dist/vue.min.js"></script> -->
+    <script src="../../dist/vue.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      {{message}}
+      <button-counter :title="tt"></button-counter>
+      <button @click="handleClick">{{bool}}</button>
+    </div>
+    <script>
+      Vue.component('button-counter', {
+        props: ['title'],
+        data: function () {
+          return {
+            count: 0
+          }
+        },
+        template: '<button v-on:click="count++">{{title}}: You clicked me {{ count }} times.</button>'
+      });
+      var app = new Vue({
+        el: '#app',
+        data: {
+          message: 'TEST',
+          tt: 'on',
+          bool: false
+        },
+        mounted() {
+          window.addEventListener('test', (e) => {
+            this.message = e.detail;
+          }, false);
+        },
+        methods:{
+          handleClick() {
+            this.bool = !this.bool
+            this.message = !this.bool
+          }
+        }
+      })
+
+      console.log(app);
+      // var event = new CustomEvent('test', { 'detail': 5 }); window.dispatchEvent(event);
+    </script>
+  </body>
+</html>

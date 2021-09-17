@@ -186,7 +186,10 @@ export function defineReactive (
       const value = getter ? getter.call(obj) : val
       if (Dep.target) {
         // 触发getter后 通过 dep.depend 做依赖收集
-        // 也就会执行 Dep.target.addDep(this)。(⭐)
+        // 也就会执行 Dep.target.addDep(this)。(⭐) this 是 传入的 watcher
+        // 也就会执行到 dep.addSub(this) this 是传入的watcher
+        // 也就是 this.subs.push(sub) 这里的 this 是 Dep， sub是传入的watcher
+        // 最终其实是把 watcher 传入到 subs 里面去，也就是对应的 Dep 对象中去
         dep.depend()
         if (childOb) {
           childOb.dep.depend()
@@ -201,6 +204,7 @@ export function defineReactive (
     set: function reactiveSetter (newVal) {
       const value = getter ? getter.call(obj) : val
       /* eslint-disable no-self-compare */
+      // 如果两次的值相等 什么也不做
       if (newVal === value || (newVal !== newVal && value !== value)) {
         return
       }
@@ -216,6 +220,7 @@ export function defineReactive (
         val = newVal
       }
       // 如果 shallow 为 false 的情况，会对新设置的值变成一个响应式对象
+      // 如果发现新值又是一个对象，那么将其变成响应式的
       childOb = !shallow && observe(newVal)
       // 通知所有的订阅者
       dep.notify()
