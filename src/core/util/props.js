@@ -18,6 +18,7 @@ type PropOptions = {
   validator: ?Function
 };
 
+// validateProp 主要就做 3 件事情：处理 Boolean 类型的数据，处理默认数据，prop 断言，并最终返回 prop 的值。
 export function validateProp (
   key: string,
   propOptions: Object,
@@ -28,6 +29,7 @@ export function validateProp (
   const absent = !hasOwn(propsData, key)
   let value = propsData[key]
   // boolean casting
+  // getTypeIndex(Boolean, prop.type) 判断 prop 的定义是否是 Boolean 类型的
   const booleanIndex = getTypeIndex(Boolean, prop.type)
   if (booleanIndex > -1) {
     if (absent && !hasOwn(prop, 'default')) {
@@ -196,6 +198,7 @@ function isSameType (a, b) {
   return getType(a) === getType(b)
 }
 
+// getTypeIndex 函数就是找到 type 和 expectedTypes 匹配的索引并返回
 function getTypeIndex (type, expectedTypes): number {
   if (!Array.isArray(expectedTypes)) {
     return isSameType(expectedTypes, type) ? 0 : -1

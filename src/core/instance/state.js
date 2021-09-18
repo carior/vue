@@ -73,6 +73,7 @@ export function initState (vm: Component) {
 }
 
 // 初始化 props 将，props 变成响应式对象
+// initProps 主要做 3 件事情：校验、响应式和代理
 function initProps (vm: Component, propsOptions: Object) {
   const propsData = vm.$options.propsData || {}
   const props = vm._props = {}
@@ -87,6 +88,11 @@ function initProps (vm: Component, propsOptions: Object) {
   // 遍历定义的 props 配置
   for (const key in propsOptions) {
     keys.push(key)
+    // 校验 props
+    // propsOptions 就是我们定义的 props 在规范后生成的 options.props 对象
+    // propsData 是从父组件传递的 prop 数据
+    // 所谓校验的目的就是检查一下我们传递的数据是否满足 prop的定义规范
+    // validateProp 方法，它定义在 src/core/util/props.js 中
     const value = validateProp(key, propsOptions, propsData, vm)
     /* istanbul ignore else */
     if (process.env.NODE_ENV !== 'production') {
@@ -113,6 +119,7 @@ function initProps (vm: Component, propsOptions: Object) {
         }
       })
     } else {
+      // 把 prop 变成响应式
       defineReactive(props, key, value)
     }
     // static props are already proxied on the component's prototype

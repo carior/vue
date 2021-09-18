@@ -299,12 +299,15 @@ export function validateComponentName (name: string) {
 /**
  * Ensure all props option syntax are normalized into the
  * Object-based format.
+ * props 规范化
  */
 function normalizeProps (options: Object, vm: ?Component) {
   const props = options.props
   if (!props) return
   const res = {}
   let i, val, name
+  // 当 props 是一个数组，每一个数组元素 prop 只能是一个 string，表示 prop 的 key，转成驼峰格式，prop 的类型为空
+  // props: ['name', 'nick-name']  =>  {name: { type: null }, nickName: { type: null }}
   if (Array.isArray(props)) {
     i = props.length
     while (i--) {
@@ -317,6 +320,9 @@ function normalizeProps (options: Object, vm: ?Component) {
       }
     }
   } else if (isPlainObject(props)) {
+    // 当 props 是一个对象，对于 props 中每个 prop 的 key，我们会转驼峰格式，而它的 value，如果不是一个对象，我们就把它规范成一个对象。
+    // 由于对象形式的 props 可以指定每个 prop 的类型和定义其它的一些属性，推荐用对象形式定义 props
+    // props: {name: String, nickName: { type: Boolean }}  =>  props: {name: { type: String }, nickName: { type: Boolean }} 
     for (const key in props) {
       val = props[key]
       name = camelize(key)
@@ -325,6 +331,7 @@ function normalizeProps (options: Object, vm: ?Component) {
         : { type: val }
     }
   } else if (process.env.NODE_ENV !== 'production') {
+    // 如果 props 既不是数组也不是对象，就抛出一个警告
     warn(
       `Invalid value for option "props": expected an Array or an Object, ` +
       `but got ${toRawType(props)}.`,
@@ -405,6 +412,8 @@ export function mergeOptions (
     child = child.options
   }
 
+  // props 规范化，这个函数的主要目的就是把我们编写的 props 转成对象格式
+  // 因为实际上 props 除了对象格式，还允许写成数组格式
   normalizeProps(child, vm)
   normalizeInject(child, vm)
   normalizeDirectives(child)
