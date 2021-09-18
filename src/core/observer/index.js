@@ -49,10 +49,14 @@ export class Observer {
     // def 的定义在 src/core/util/lang.js，是对 Object.defineProperty 的封装
     // 这就是为什么我在开发中输出 data 上对象类型的数据，会发现该对象多了一个 __ob__ 的属性
     def(value, '__ob__', this)
+    // 只需要关注 value 是 Array 的情况
     if (Array.isArray(value)) {
+      // hasProto 实际上就是判断对象中是否存在 __proto__
       if (hasProto) {
+        // 如果存在则 augment 指向 protoAugment
         protoAugment(value, arrayMethods)
       } else {
+        // 否则指向 copyAugment
         copyAugment(value, arrayMethods, arrayKeys)
       }
       // 对于数组会调用 observeArray 方法
@@ -93,8 +97,12 @@ export class Observer {
  * Augment a target Object or Array by intercepting
  * the prototype chain using __proto__
  */
+// 对于大部分现代浏览器都会走到 protoAugment
+// 它实际上就把 value 的原型指向了 arrayMethods
+// arrayMethods 的定义在 src/core/observer/array.js 中
 function protoAugment (target, src: Object) {
   /* eslint-disable no-proto */
+  // 把 target.__proto__ 原型直接修改为 src
   target.__proto__ = src
   /* eslint-enable no-proto */
 }
@@ -104,6 +112,7 @@ function protoAugment (target, src: Object) {
  * hidden properties.
  */
 /* istanbul ignore next */
+// 方法是遍历 keys，通过 def，也就是 Object.defineProperty 去定义它自身的属性值
 function copyAugment (target: Object, src: Object, keys: Array<string>) {
   for (let i = 0, l = keys.length; i < l; i++) {
     const key = keys[i]
@@ -232,6 +241,12 @@ export function defineReactive (
  * Set a property on an object. Adds the new property and
  * triggers change notification if the property doesn't
  * already exist.
+ * Vue 也是不能检测到以下变动的数组：
+ * 1.当你利用索引直接设置一个项时，例如：vm.items[indexOfItem] = newValue
+ * 2.当你修改数组的长度时，例如：vm.items.length = newLength
+ * 对于第一种情况，可以使用：Vue.set(example1.items, indexOfItem, newValue)；
+ * 而对于第二种情况，可以使用 vm.items.splice(newLength)。
+ * 那么这里的 splice 到底有什么黑魔法，能让添加的对象变成响应式的呢
  */
 export function set (target: Array<any> | Object, key: any, val: any): any {
   if (process.env.NODE_ENV !== 'production' &&
@@ -239,15 +254,19 @@ export function set (target: Array<any> | Object, key: any, val: any): any {
   ) {
     warn(`Cannot set reactive property on undefined, null, or primitive value: ${(target: any)}`)
   }
+  // 如果 target 是数组且 key 是一个合法的下标，则之前通过 splice 去添加进数组然后返回，
+  // 这里的 splice 其实已经不仅仅是原生数组的 splice 了
   if (Array.isArray(target) && isValidArrayIndex(key)) {
     target.length = Math.max(target.length, key)
     target.splice(key, 1, val)
     return val
   }
+  // 又判断 key 已经存在于 target 中，则直接赋值返回
   if (key in target && !(key in Object.prototype)) {
     target[key] = val
     return val
   }
+  // 接着再获取到 target.__ob__ 并赋值给 ob
   const ob = (target: any).__ob__
   if (target._isVue || (ob && ob.vmCount)) {
     process.env.NODE_ENV !== 'production' && warn(
@@ -256,11 +275,15 @@ export function set (target: Array<any> | Object, key: any, val: any): any {
     )
     return val
   }
+  // 之前分析过它是在 Observer 的构造函数执行的时候初始化的，表示 Observer 的一个实例，
+  // 如果它不存在，则说明 target 不是一个响应式的对象，则直接赋值并返回
   if (!ob) {
     target[key] = val
     return val
   }
+  // 把新添加的属性变成响应式对象
   defineReactive(ob.value, key, val)
+  // 手动的触发依赖通知
   ob.dep.notify()
   return val
 }

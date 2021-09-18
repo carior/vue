@@ -40,6 +40,7 @@ export default class Dep {
 
   depend () {
     // 如果 Dep.target 已经被赋值为渲染 watcher，那么就执行到 addDep 方法
+    // addDep => dep.addSub(this)
     if (Dep.target) {
       Dep.target.addDep(this)
     }
