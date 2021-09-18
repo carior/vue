@@ -4931,6 +4931,7 @@
   Watcher.prototype.update = function update () {
     /* istanbul ignore else */
     if (this.lazy) {
+      // 把 this.dirty = true，只有当下次再访问这个计算属性的时候才会重新求值
       this.dirty = true;
     } else if (this.sync) {
       this.run();
@@ -4975,6 +4976,7 @@
    * This only gets called for lazy watchers.
    */
   Watcher.prototype.evaluate = function evaluate () {
+    // 在求值过程中，会执行 value = this.getter.call(vm, vm)，这实际上就是执行了计算属性定义的 getter 函数
     this.value = this.get();
     this.dirty = false;
   };
@@ -5043,7 +5045,9 @@
     } else {
       observe(vm._data = {}, true /* asRootData */);
     }
+    // 计算属性 是一个 computed watcher
     if (opts.computed) { initComputed(vm, opts.computed); }
+    // 侦听属性
     if (opts.watch && opts.watch !== nativeWatch) {
       initWatch(vm, opts.watch);
     }
@@ -5167,13 +5171,18 @@
 
   function initComputed (vm, computed) {
     // $flow-disable-line
+    // 函数首先创建 vm._computedWatchers 为一个空对象
     var watchers = vm._computedWatchers = Object.create(null);
     // computed properties are just getters during SSR
     var isSSR = isServerRendering();
 
+    // 接着对 computed 对象做遍历
     for (var key in computed) {
+      // 拿到计算属性的每一个 userDef
       var userDef = computed[key];
+      // 然后尝试获取这个 userDef 对应的 getter 函数
       var getter = typeof userDef === 'function' ? userDef : userDef.get;
+      // 拿不到则在开发环境下报警告
       if ( getter == null) {
         warn(
           ("Getter is missing for computed property \"" + key + "\"."),
@@ -5183,6 +5192,9 @@
 
       if (!isSSR) {
         // create internal watcher for the computed property.
+        // 接下来为每一个 getter 创建一个 watcher
+        // 这个 watcher 和渲染 watcher 有一点很大的不同，它是一个 computed watcher
+        // const computedWatcherOptions = { lazy: true }
         watchers[key] = new Watcher(
           vm,
           getter || noop,
@@ -5194,9 +5206,13 @@
       // component-defined computed properties are already defined on the
       // component prototype. We only need to define computed properties defined
       // at instantiation here.
+      // 最后对判断如果 key 不是 vm 的属性
       if (!(key in vm)) {
+        // 则调用 defineComputed(vm, key, userDef)
         defineComputed(vm, key, userDef);
       } else {
+        // 否则判断计算属性对于的 key 是否已经被 data 或者 prop 所占用
+        // 如果是的话则在开发环境报相应的警告
         if (key in vm.$data) {
           warn(("The computed property \"" + key + "\" is already defined in data."), vm);
         } else if (vm.$options.props && key in vm.$options.props) {
@@ -5207,7 +5223,11 @@
       }
     }
   }
-
+  /**
+    *
+    * 其实就是利用 Object.defineProperty 给计算属性对应的 key 值添加 getter 和 setter
+    * setter 通常是计算属性是一个对象，并且拥有 set 方法的时候才有，否则是一个空函数。
+   **/
   function defineComputed (
     target,
     key,
@@ -5215,6 +5235,7 @@
   ) {
     var shouldCache = !isServerRendering();
     if (typeof userDef === 'function') {
+      // 主要关注 get 的 createComputedGetter
       sharedPropertyDefinition.get = shouldCache
         ? createComputedGetter(key)
         : createGetterInvoker(userDef);
@@ -5239,11 +5260,13 @@
     Object.defineProperty(target, key, sharedPropertyDefinition);
   }
 
+  // 返回一个函数 computedGetter ， 它就是计算属性对应的 getter
   function createComputedGetter (key) {
     return function computedGetter () {
       var watcher = this._computedWatchers && this._computedWatchers[key];
       if (watcher) {
         if (watcher.dirty) {
+          // 执行了 watcher.evaluate() 去求值
           watcher.evaluate();
         }
         if (Dep.target) {
@@ -5288,6 +5311,7 @@
     }
   }
 
+  // 对 initWatcher
   function initWatch (vm, watch) {
     for (var key in watch) {
       var handler = watch[key];

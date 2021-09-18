@@ -16,6 +16,9 @@ export function traverse (val: any) {
   seenObjects.clear()
 }
 
+// 它实际上就是对一个对象做深层递归遍历
+// 因为遍历过程中就是对一个子对象的访问，会触发它们的 getter 过程，这样就可以收集到依赖
+// 也就是订阅它们变化的 watcher
 function _traverse (val: any, seen: SimpleSet) {
   let i, keys
   const isA = Array.isArray(val)
@@ -23,6 +26,7 @@ function _traverse (val: any, seen: SimpleSet) {
     return
   }
   if (val.__ob__) {
+    // 遍历过程中会把子响应式对象通过它们的 dep id 记录到 seenObjects，避免以后重复访问
     const depId = val.__ob__.dep.id
     if (seen.has(depId)) {
       return

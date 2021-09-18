@@ -59,11 +59,16 @@ export default class Watcher {
     // vm._watcher 是专门用来监听 vm 上数据变化然后重新渲染的，所以它是一个渲染相关的 watcher
     // 因此在 callUpdatedHooks 函数中，只有 vm._watcher 的回调执行完毕后，才会执行 updated 钩子函数。
     vm._watchers.push(this)
-    // options
+    // Watcher 的构造函数对 options 做的了处理
+    // watcher 总共有 4 种类型
     if (options) {
       this.deep = !!options.deep
-      this.user = !!options.user
-      this.lazy = !!options.lazy
+      this.user = !!options.user // 通过 vm.$watch 创建的 watcher 是一个 user watcher
+      this.lazy = !!options.lazy // lazy watcher 几乎就是为计算属性 computed 量身定制的
+      // 当响应式数据发送变化后，触发了 watcher.update()，只是把这个 watcher 推送到一个队列中，在 nextTick 后才会真正执行 watcher 的回调函数。
+      // 而一旦我们设置了 sync，就可以在当前 Tick 中同步执行 watcher 的回调函数
+      // 只有当我们需要 watch 的值的变化到执行 watcher 的回调函数是一个同步过程的时候才会去设置该属性为 true。
+      // 但在官网文档中甚至没有告诉用户options参数包含sync配置项。因此在我理解中，用户是无法创建同步更新的watcher的。
       this.sync = !!options.sync
       this.before = options.before
     } else {
@@ -124,6 +129,7 @@ export default class Watcher {
       value = this.getter.call(vm, vm)
     } catch (e) {
       if (this.user) {
+        // handleError 在 Vue 中是一个错误捕获并且暴露给用户的一个利器
         handleError(e, vm, `getter for watcher "${this.expression}"`)
       } else {
         throw e
@@ -133,6 +139,8 @@ export default class Watcher {
       // dependencies for deep watching
       // 在完成依赖收集后，是要递归去访问 value，触发它所有子项的 getter
       if (this.deep) {
+        // 它的定义在 src/core/observer/traverse.js 中
+        // 那么在执行了 traverse 后，我们再对 watch 的对象内部任何一个值做修改，也会调用 watcher 的回调函数了。
         traverse(value)
       }
       // 把 Dep.target 恢复成上一个状态，
@@ -207,6 +215,7 @@ export default class Watcher {
   update () {
     /* istanbul ignore else */
     if (this.lazy) {
+      // 把 this.dirty = true，只有当下次再访问这个计算属性的时候才会重新求值
       this.dirty = true
     } else if (this.sync) {
       this.run()
@@ -251,6 +260,7 @@ export default class Watcher {
    * This only gets called for lazy watchers.
    */
   evaluate () {
+    // 在求值过程中，会执行 value = this.getter.call(vm, vm)，这实际上就是执行了计算属性定义的 getter 函数
     this.value = this.get()
     this.dirty = false
   }
@@ -267,6 +277,7 @@ export default class Watcher {
 
   /**
    * Remove self from all dependencies' subscriber list.
+   * 移除这个 watcher
    */
   teardown () {
     if (this.active) {

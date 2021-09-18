@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>vue test</title>
+    <!-- Delete ".min" for console warnings in development -->
+    <!-- <script src="../../dist/vue.min.js"></script> -->
+    <script src="../../dist/vue.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      app
+      <div @click="handleClick">点我</div>
+    </div>
+    <script>
+      new Vue({
+        el: '#app',
+        data(){
+          return {
+            a: {
+              b: 1
+            },
+            text: 'xxx'
+          }
+        },
+        watch: {
+          a: {
+            // 这个时候是不会 log 任何数据的，因为我们是 watch 了 a 对象，只触发了 a 的 getter，并没有触发 a.b 的 getter，所以并没有订阅它的变化，导致我们对 vm.a.b = 2 赋值的时候，虽然触发了 setter，
+            // 但没有可通知的对象，所以也并不会触发 watch 的回调函数了
+            handler(newVal) {
+              console.log(newVal)
+            },
+          }
+        },
+        methods: {
+          handleClick() {
+            this.a.b = 2
+            this.text = '111'
+          }
+        }
+      })
+    </script>
+  </body>
+</html>
